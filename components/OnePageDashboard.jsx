@@ -139,14 +139,15 @@ function buildRealForecast(months, selected, realField, forecastField) {
   return linha;
 }
 
-function PillLabel({ x, y, value, fill }) {
+function PillLabel({ x, y, value, fill, index }) {
   if (value === null || value === undefined || isNaN(value)) return null;
   const text = (value > 0 ? "+" : "") + value.toFixed(1).replace(".", ",") + "%";
-  const w = 14 + text.length * 5.6;
+  const w = 12 + text.length * 5.2;
+  const stagger = (index % 2 === 0) ? 22 : 34;
   return (
     <g>
-      <rect x={x - w / 2} y={y - 22} width={w} height={16} rx={8} fill={fill} />
-      <text x={x} y={y - 10.5} textAnchor="middle" fontSize={9} fontWeight={700} fill="#fff">{text}</text>
+      <rect x={x - w / 2} y={y - stagger - 14} width={w} height={14} rx={7} fill={fill} />
+      <text x={x} y={y - stagger - 4} textAnchor="middle" fontSize={8.5} fontWeight={700} fill="#fff">{text}</text>
     </g>
   );
 }
@@ -758,21 +759,21 @@ export default function OnePageDashboard() {
                     <ReceitaLine title="Receita de Mall" atual={d.mall_atual} meta={d.mall_meta} ano={d.mall_ano} />
                     <ReceitaLine title="Receita de Mídia" atual={d.midia_atual} meta={d.midia_meta} ano={d.midia_ano} />
                   </div>
-                  <ResponsiveContainer width="100%" height={190}>
-                    <LineChart data={noiSeries} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                  <ResponsiveContainer width="100%" height={280}>
+                    <LineChart data={noiSeries} margin={{ top: 24, right: 8, left: 0, bottom: 4 }}>
                       <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
                       <XAxis dataKey="mes" tick={{ fill: C.sand, fontSize: 10 }} axisLine={{ stroke: C.teal }} tickLine={false} />
-                      <YAxis tickFormatter={v => fmtMoney(v)} tick={{ fill: C.sand, fontSize: 9 }} axisLine={false} tickLine={false} width={44} />
+                      <YAxis hide />
                       <Tooltip contentStyle={{ background: C.cardAlt, border: `1px solid ${C.teal}`, borderRadius: 8, fontSize: 11 }} formatter={v => fmtMoney(v)} />
                       <Legend wrapperStyle={{ fontSize: 10, color: C.sand }} />
                       <Line type="monotone" dataKey="Real 2026" stroke={C.gold} strokeWidth={2.5} dot={{ r: 3 }}>
-                        <LabelList dataKey="Real 2026" position="top" formatter={v => fmtMoney(v)} fill={C.gold} fontSize={9} />
+                        <LabelList dataKey="Real 2026" position="top" formatter={v => fmtMoney(v)} fill={C.gold} fontSize={9} offset={12} />
                       </Line>
                       <Line type="monotone" dataKey="Meta" stroke={C.sand} strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 2 }}>
-                        <LabelList dataKey="Meta" position="bottom" formatter={v => fmtMoney(v)} fill={C.sand} fontSize={8} />
+                        <LabelList dataKey="Meta" position="bottom" formatter={v => fmtMoney(v)} fill={C.sand} fontSize={8} offset={10} />
                       </Line>
                       <Line type="monotone" dataKey="Real A-1" stroke={C.green} strokeWidth={1.5} dot={{ r: 2 }}>
-                        <LabelList dataKey="Real A-1" position="bottom" formatter={v => fmtMoney(v)} fill={C.green} fontSize={8} offset={16} />
+                        <LabelList dataKey="Real A-1" position="bottom" formatter={v => fmtMoney(v)} fill={C.green} fontSize={8} offset={26} />
                       </Line>
                     </LineChart>
                   </ResponsiveContainer>
@@ -781,21 +782,21 @@ export default function OnePageDashboard() {
 
               <Card>
                 <CardTitle badge="INAD">Inadimplência AMM + COND</CardTitle>
-                <ResponsiveContainer width="100%" height={150}>
-                  <LineChart data={inadSeries} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={inadSeries} margin={{ top: 24, right: 4, left: 4, bottom: 4 }}>
                     <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
                     <XAxis dataKey="mes" tick={{ fill: C.sand, fontSize: 10 }} axisLine={{ stroke: C.teal }} tickLine={false} />
-                    <YAxis tickFormatter={v => v + "%"} tick={{ fill: C.sand, fontSize: 9 }} axisLine={false} tickLine={false} width={36} />
+                    <YAxis hide />
                     <Tooltip contentStyle={{ background: C.cardAlt, border: `1px solid ${C.teal}`, borderRadius: 8, fontSize: 11 }} formatter={v => fmtPct(v)} />
                     <Legend wrapperStyle={{ fontSize: 10, color: C.sand }} />
                     <Line type="monotone" dataKey="Meta 2026" stroke={C.sand} strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 2 }}>
-                      <LabelList dataKey="Meta 2026" position="bottom" formatter={v => fmtPct(v)} fill={C.sand} fontSize={8} />
+                      <LabelList dataKey="Meta 2026" position="bottom" formatter={v => fmtPct(v)} fill={C.sand} fontSize={8} offset={10} />
                     </Line>
                     <Line type="monotone" dataKey="Real 2026" stroke={C.gold} strokeWidth={2.5} dot={{ r: 3 }}>
-                      <LabelList dataKey="Real 2026" position="top" formatter={v => fmtPct(v)} fill={C.gold} fontSize={9} />
+                      <LabelList dataKey="Real 2026" position="top" formatter={v => fmtPct(v)} fill={C.gold} fontSize={9} offset={12} />
                     </Line>
                     <Line type="monotone" dataKey="Real 2025" stroke={C.green} strokeWidth={1.5} dot={{ r: 2 }}>
-                      <LabelList dataKey="Real 2025" position="bottom" formatter={v => fmtPct(v)} fill={C.green} fontSize={8} offset={14} />
+                      <LabelList dataKey="Real 2025" position="bottom" formatter={v => fmtPct(v)} fill={C.green} fontSize={8} offset={24} />
                     </Line>
                   </LineChart>
                 </ResponsiveContainer>
@@ -818,9 +819,9 @@ export default function OnePageDashboard() {
                   <AnnotationBox storageKey={`note:${selected}:vt-delta`} placeholder="Observação sobre a variação de vendas…" />
                 )}
                 {vtHasSeries && (
-                  <ResponsiveContainer width="100%" height={70}>
+                  <ResponsiveContainer width="100%" height={44}>
                     <LineChart data={vtSeries} margin={{ top: 2, right: 4, left: 4, bottom: 0 }}>
-                      <Line type="monotone" dataKey="% vs A-1" stroke="#5FC9BE" strokeWidth={2} dot={false} />
+                      <Line type="monotone" dataKey="% vs A-1" stroke="#7FEAD9" strokeWidth={2} dot={false} />
                       <Tooltip content={<NiceTooltip />} />
                     </LineChart>
                   </ResponsiveContainer>
@@ -840,9 +841,9 @@ export default function OnePageDashboard() {
                     <div style={{ fontSize: 9.5, letterSpacing: "0.05em", color: C.inkDim, fontWeight: 700, margin: "16px 0 20px" }}>
                       VT — REAL x FORECAST ({competenciaLabel(selected).ano})
                     </div>
-                    <ResponsiveContainer width="100%" height={140}>
-                      <LineChart data={vtYtd} margin={{ top: 22, right: 8, left: 4, bottom: 0 }}>
-                        <XAxis dataKey="cat" tick={{ fill: C.sand, fontSize: 9 }} axisLine={{ stroke: C.teal }} tickLine={false} interval={0} />
+                    <ResponsiveContainer width="100%" height={190}>
+                      <LineChart data={vtYtd} margin={{ top: 40, right: 14, left: 14, bottom: 4 }}>
+                        <XAxis dataKey="cat" tick={{ fill: C.sand, fontSize: 9 }} axisLine={{ stroke: C.teal }} tickLine={false} interval={0} padding={{ left: 10, right: 10 }} />
                         <YAxis hide />
                         <Line type="monotone" dataKey="Real" stroke={C.headerFrom} strokeWidth={2} dot={{ r: 3 }} connectNulls={false}>
                           <LabelList dataKey="Real" content={p => <PillLabel {...p} fill={C.headerFrom} />} />
@@ -873,7 +874,7 @@ export default function OnePageDashboard() {
                   </div>
                 )}
                 {sssHasSeries ? (
-                  <ResponsiveContainer width="100%" height={70}>
+                  <ResponsiveContainer width="100%" height={44}>
                     <LineChart data={sssSeries} margin={{ top: 2, right: 4, left: 4, bottom: 0 }}>
                       <Line type="monotone" dataKey="SSS" stroke={C.gold} strokeWidth={2} dot={false} />
                       <Tooltip content={<NiceTooltip />} />
@@ -895,9 +896,9 @@ export default function OnePageDashboard() {
                     <div style={{ fontSize: 9.5, letterSpacing: "0.05em", color: C.inkDim, fontWeight: 700, margin: "16px 0 20px" }}>
                       SSS — REAL x FORECAST ({competenciaLabel(selected).ano})
                     </div>
-                    <ResponsiveContainer width="100%" height={140}>
-                      <LineChart data={sssYtd} margin={{ top: 22, right: 8, left: 4, bottom: 0 }}>
-                        <XAxis dataKey="cat" tick={{ fill: C.sand, fontSize: 9 }} axisLine={{ stroke: C.teal }} tickLine={false} interval={0} />
+                    <ResponsiveContainer width="100%" height={190}>
+                      <LineChart data={sssYtd} margin={{ top: 40, right: 14, left: 14, bottom: 4 }}>
+                        <XAxis dataKey="cat" tick={{ fill: C.sand, fontSize: 9 }} axisLine={{ stroke: C.teal }} tickLine={false} interval={0} padding={{ left: 10, right: 10 }} />
                         <YAxis hide />
                         <Line type="monotone" dataKey="Real" stroke={C.headerFrom} strokeWidth={2} dot={{ r: 3 }} connectNulls={false}>
                           <LabelList dataKey="Real" content={p => <PillLabel {...p} fill={C.headerFrom} />} />
@@ -993,9 +994,9 @@ export default function OnePageDashboard() {
             print-color-adjust: exact !important;
             color-adjust: exact !important;
           }
-          @page { size: A4 landscape; margin: 6mm; }
+          @page { size: A4 portrait; margin: 5mm; }
           .onepage-print-root {
-            zoom: 0.55;
+            zoom: 0.38;
           }
         }
       `}</style>
