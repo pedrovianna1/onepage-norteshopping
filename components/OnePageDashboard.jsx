@@ -6,6 +6,33 @@ import {
 } from "recharts";
 import { Upload, Download, TrendingUp, TrendingDown, ChevronDown, ArrowUp, ArrowDown, FileDown, Save, RotateCcw, User } from "lucide-react";
 
+// ---------- Shim: window.storage -> localStorage (fora do ambiente de artifacts) ----------
+if (typeof window !== "undefined" && !window.storage) {
+  const PREFIX = "onepage_ns::";
+  window.storage = {
+    async get(key) {
+      const raw = window.localStorage.getItem(PREFIX + key);
+      if (raw === null) throw new Error("key not found");
+      return { key, value: raw, shared: false };
+    },
+    async set(key, value) {
+      window.localStorage.setItem(PREFIX + key, value);
+      return { key, value, shared: false };
+    },
+    async delete(key) {
+      window.localStorage.removeItem(PREFIX + key);
+      return { key, deleted: true, shared: false };
+    },
+    async list(prefix = "") {
+      const keys = Object.keys(window.localStorage)
+        .filter(k => k.startsWith(PREFIX + prefix))
+        .map(k => k.slice(PREFIX.length));
+      return { keys, prefix, shared: false };
+    },
+  };
+}
+
+
 // ---------- Design tokens (extraídos do PPT + imagem de referência NorteShopping) ----------
 const C = {
   page: "#F4EFE4",
