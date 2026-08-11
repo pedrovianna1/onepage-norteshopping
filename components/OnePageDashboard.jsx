@@ -53,8 +53,8 @@ const C = {
 const COLUMNS = [
   "competencia",
   "noi_atual", "noi_meta", "noi_ano_anterior",
-  "sss_atual_pct", "sss_meta_pct", "sss_ano_pct", "cpi1_pct", "cpi2_pct", "cpi3_pct",
-  "vt_atual", "vt_ano_anterior_pct", "vt_ytd_pct",
+  "sss_atual_pct", "sss_meta_pct", "sss_ano_pct", "sss_forecast_pct", "cpi1_pct", "cpi2_pct", "cpi3_pct",
+  "vt_atual", "vt_ano_anterior_pct", "vt_ytd_pct", "vt_forecast_pct",
   "inad_atual_pct", "inad_meta_pct", "inad_ano_pct",
   "ocup_atual_pct", "ocup_meta_pct", "ocup_ano_pct",
   "aluguel_min_atual", "aluguel_min_meta", "aluguel_min_ano",
@@ -74,8 +74,8 @@ const COLUMNS = [
 const EXAMPLE_ROW = {
   competencia: "2026-06",
   noi_atual: 13600000, noi_meta: 13260000, noi_ano_anterior: 13300000,
-  sss_atual_pct: 1.6, sss_meta_pct: 1.3, sss_ano_pct: -0.6, cpi1_pct: 1.9, cpi2_pct: 4.7, cpi3_pct: -4.9,
-  vt_atual: 125700000, vt_ano_anterior_pct: 5.7, vt_ytd_pct: 6.2,
+  sss_atual_pct: 1.6, sss_meta_pct: 1.3, sss_ano_pct: -0.6, sss_forecast_pct: 1.8, cpi1_pct: 1.9, cpi2_pct: 4.7, cpi3_pct: -4.9,
+  vt_atual: 125700000, vt_ano_anterior_pct: 5.7, vt_ytd_pct: 6.2, vt_forecast_pct: 6.0,
   inad_atual_pct: -1.8, inad_meta_pct: -2.1, inad_ano_pct: -7.4,
   ocup_atual_pct: 98.1, ocup_meta_pct: 96.1, ocup_ano_pct: 91.2,
   aluguel_min_atual: 8700000, aluguel_min_meta: 9666000, aluguel_min_ano: 8878000,
@@ -106,50 +106,36 @@ function parsePairs(str) {
 const MESES_ABREV = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const MESES_PT = ["JANEIRO", "FEVEREIRO", "MARÇO", "ABRIL", "MAIO", "JUNHO", "JULHO", "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO"];
 
-function linearFit(points) {
-  const n = points.length;
-  if (n === 0) return () => null;
-  if (n === 1) { const y0 = points[0].y; return () => y0; }
-  const sumX = points.reduce((a, p) => a + p.x, 0);
-  const sumY = points.reduce((a, p) => a + p.y, 0);
-  const sumXY = points.reduce((a, p) => a + p.x * p.y, 0);
-  const sumXX = points.reduce((a, p) => a + p.x * p.x, 0);
-  const denom = n * sumXX - sumX * sumX;
-  if (denom === 0) { const avg = sumY / n; return () => avg; }
-  const slope = (n * sumXY - sumX * sumY) / denom;
-  const intercept = (sumY - slope * sumX) / n;
-  return x => slope * x + intercept;
-}
-
 // Monta os 12 meses do ano da competência selecionada + colunas YTD/Forecast,
-// com "Real" vindo dos dados importados e "Forecast" projetado por regressão linear.
-function buildYtdForecast(months, selected, field) {
+// usando os valores "Real" e "Forecast" digitados manualmente em cada mês (sem projeção automática).
+function buildRealForecast(months, selected, realField, forecastField) {
   const [anoSel] = selected.split("-");
-  const pontosReais = [];
   const porMes = {};
   Object.keys(months).forEach(comp => {
     const [ano, mesNum] = comp.split("-");
     if (ano !== anoSel) return;
-    const idx = parseInt(mesNum, 10);
-    const val = months[comp][field];
-    if (hasVal(val)) {
-      pontosReais.push({ x: idx, y: val });
-      porMes[idx] = val;
-    }
+    porMes[parseInt(mesNum, 10)] = months[comp];
   });
-  const forecastFn = linearFit(pontosReais);
   const linha = [];
+  const reais = [];
+  const forecasts = [];
   for (let m = 1; m <= 12; m++) {
+    const row = porMes[m] || {};
+    const real = row[realField];
+    const forecast = row[forecastField];
+    if (hasVal(real)) reais.push(real);
+    if (hasVal(forecast)) forecasts.push(forecast);
     linha.push({
       cat: MESES_ABREV[m - 1],
-      Real: porMes[m] !== undefined ? porMes[m] : null,
-      Forecast: pontosReais.length ? forecastFn(m) : null,
+      Real: hasVal(real) ? real : null,
+      Forecast: hasVal(forecast) ? forecast : null,
     });
   }
-  const ytd = pontosReais.length ? pontosReais.reduce((a, p) => a + p.y, 0) / pontosReais.length : null;
-  const forecastFim = pontosReais.length ? forecastFn(12) : null;
+  if (!reais.length && !forecasts.length) return null;
+  const ytd = reais.length ? reais.reduce((a, b) => a + b, 0) / reais.length : null;
+  const forecastFinal = forecasts.length ? forecasts.reduce((a, b) => a + b, 0) / forecasts.length : null;
   linha.push({ cat: "YTD", YTD: ytd });
-  linha.push({ cat: "Forecast", ForecastFinal: forecastFim });
+  linha.push({ cat: "Forecast", ForecastFinal: forecastFinal });
   return linha;
 }
 
@@ -627,8 +613,8 @@ export default function OnePageDashboard() {
   const hasCpi = hasVal(d?.cpi1_pct) || hasVal(d?.cpi2_pct) || hasVal(d?.cpi3_pct);
   const hasVtDelta = hasVal(d?.vt_ano_anterior_pct) || hasVal(d?.vt_ytd_pct);
 
-  const vtYtd = selected ? buildYtdForecast(months, selected, "vt_ano_anterior_pct") : null;
-  const sssYtd = selected ? buildYtdForecast(months, selected, "sss_atual_pct") : null;
+  const vtYtd = selected ? buildRealForecast(months, selected, "vt_ano_anterior_pct", "vt_forecast_pct") : null;
+  const sssYtd = selected ? buildRealForecast(months, selected, "sss_atual_pct", "sss_forecast_pct") : null;
 
   const ocupData = d ? [
     { name: "ocupado", value: d.ocup_atual_pct },
@@ -779,9 +765,15 @@ export default function OnePageDashboard() {
                       <YAxis tickFormatter={v => fmtMoney(v)} tick={{ fill: C.sand, fontSize: 9 }} axisLine={false} tickLine={false} width={44} />
                       <Tooltip contentStyle={{ background: C.cardAlt, border: `1px solid ${C.teal}`, borderRadius: 8, fontSize: 11 }} formatter={v => fmtMoney(v)} />
                       <Legend wrapperStyle={{ fontSize: 10, color: C.sand }} />
-                      <Line type="monotone" dataKey="Real 2026" stroke={C.gold} strokeWidth={2.5} dot={{ r: 3 }} />
-                      <Line type="monotone" dataKey="Meta" stroke={C.sand} strokeWidth={1.5} strokeDasharray="4 3" dot={false} />
-                      <Line type="monotone" dataKey="Real A-1" stroke={C.green} strokeWidth={1.5} dot={false} />
+                      <Line type="monotone" dataKey="Real 2026" stroke={C.gold} strokeWidth={2.5} dot={{ r: 3 }}>
+                        <LabelList dataKey="Real 2026" position="top" formatter={v => fmtMoney(v)} fill={C.gold} fontSize={9} />
+                      </Line>
+                      <Line type="monotone" dataKey="Meta" stroke={C.sand} strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 2 }}>
+                        <LabelList dataKey="Meta" position="bottom" formatter={v => fmtMoney(v)} fill={C.sand} fontSize={8} />
+                      </Line>
+                      <Line type="monotone" dataKey="Real A-1" stroke={C.green} strokeWidth={1.5} dot={{ r: 2 }}>
+                        <LabelList dataKey="Real A-1" position="bottom" formatter={v => fmtMoney(v)} fill={C.green} fontSize={8} offset={16} />
+                      </Line>
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -796,9 +788,15 @@ export default function OnePageDashboard() {
                     <YAxis tickFormatter={v => v + "%"} tick={{ fill: C.sand, fontSize: 9 }} axisLine={false} tickLine={false} width={36} />
                     <Tooltip contentStyle={{ background: C.cardAlt, border: `1px solid ${C.teal}`, borderRadius: 8, fontSize: 11 }} formatter={v => fmtPct(v)} />
                     <Legend wrapperStyle={{ fontSize: 10, color: C.sand }} />
-                    <Line type="monotone" dataKey="Meta 2026" stroke={C.sand} strokeWidth={1.5} strokeDasharray="4 3" dot={false} />
-                    <Line type="monotone" dataKey="Real 2026" stroke={C.gold} strokeWidth={2.5} dot={{ r: 3 }} />
-                    <Line type="monotone" dataKey="Real 2025" stroke={C.green} strokeWidth={1.5} dot={false} />
+                    <Line type="monotone" dataKey="Meta 2026" stroke={C.sand} strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 2 }}>
+                      <LabelList dataKey="Meta 2026" position="bottom" formatter={v => fmtPct(v)} fill={C.sand} fontSize={8} />
+                    </Line>
+                    <Line type="monotone" dataKey="Real 2026" stroke={C.gold} strokeWidth={2.5} dot={{ r: 3 }}>
+                      <LabelList dataKey="Real 2026" position="top" formatter={v => fmtPct(v)} fill={C.gold} fontSize={9} />
+                    </Line>
+                    <Line type="monotone" dataKey="Real 2025" stroke={C.green} strokeWidth={1.5} dot={{ r: 2 }}>
+                      <LabelList dataKey="Real 2025" position="bottom" formatter={v => fmtPct(v)} fill={C.green} fontSize={8} offset={14} />
+                    </Line>
                   </LineChart>
                 </ResponsiveContainer>
                 <MoverList title="TOP OFENSORES (MÊS EM VALOR ABSOLUTO)" items={ofensores} color={C.red} />
@@ -849,7 +847,9 @@ export default function OnePageDashboard() {
                         <Line type="monotone" dataKey="Real" stroke={C.headerFrom} strokeWidth={2} dot={{ r: 3 }} connectNulls={false}>
                           <LabelList dataKey="Real" content={p => <PillLabel {...p} fill={C.headerFrom} />} />
                         </Line>
-                        <Line type="monotone" dataKey="Forecast" stroke="#5FC9BE" strokeWidth={1.5} strokeDasharray="4 3" dot={false} connectNulls />
+                        <Line type="monotone" dataKey="Forecast" stroke="#5FC9BE" strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 3 }} connectNulls={false}>
+                          <LabelList dataKey="Forecast" content={p => <PillLabel {...p} fill="#2E6F63" />} />
+                        </Line>
                         <Line type="monotone" dataKey="YTD" stroke="none" dot={{ r: 3, fill: C.green }}>
                           <LabelList dataKey="YTD" content={p => <PillLabel {...p} fill={C.green} />} />
                         </Line>
@@ -902,7 +902,9 @@ export default function OnePageDashboard() {
                         <Line type="monotone" dataKey="Real" stroke={C.headerFrom} strokeWidth={2} dot={{ r: 3 }} connectNulls={false}>
                           <LabelList dataKey="Real" content={p => <PillLabel {...p} fill={C.headerFrom} />} />
                         </Line>
-                        <Line type="monotone" dataKey="Forecast" stroke={C.gold} strokeWidth={1.5} strokeDasharray="4 3" dot={false} connectNulls />
+                        <Line type="monotone" dataKey="Forecast" stroke={C.gold} strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 3 }} connectNulls={false}>
+                          <LabelList dataKey="Forecast" content={p => <PillLabel {...p} fill="#B07A2E" />} />
+                        </Line>
                         <Line type="monotone" dataKey="YTD" stroke="none" dot={{ r: 3, fill: C.green }}>
                           <LabelList dataKey="YTD" content={p => <PillLabel {...p} fill={C.green} />} />
                         </Line>
