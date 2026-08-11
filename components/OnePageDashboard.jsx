@@ -165,6 +165,11 @@ function NiceTooltip({ active, payload, label }) {
     </div>
   );
 }
+function mesCurto(comp) {
+  const [ano, mesNum] = comp.split("-");
+  const idx = parseInt(mesNum, 10) - 1;
+  return `${MESES_ABREV[idx] || mesNum}/${ano.slice(2)}`;
+}
 function competenciaLabel(comp) {
   if (!comp) return { mes: "—", ano: "" };
   const [ano, mesNum] = comp.split("-");
@@ -576,14 +581,14 @@ export default function OnePageDashboard() {
   const d = selected ? months[selected] : null;
 
   const noiSeries = comps.map(c => ({
-    mes: c.slice(2).replace("-", "/"),
+    mes: mesCurto(c),
     "Real 2026": months[c].noi_atual,
     "Meta": months[c].noi_meta,
     "Real A-1": months[c].noi_ano_anterior,
   }));
 
   const inadSeries = comps.map(c => ({
-    mes: c.slice(2).replace("-", "/"),
+    mes: mesCurto(c),
     "Meta 2026": months[c].inad_meta_pct,
     "Real 2026": months[c].inad_atual_pct,
     "Real 2025": months[c].inad_ano_pct,
@@ -602,11 +607,11 @@ export default function OnePageDashboard() {
   const maxSeg = segmentos.length ? Math.max(...segmentos.map(s => s.valor)) : 1;
 
   const vtSeries = comps.map(c => ({
-    mes: c.slice(2).replace("-", "/"),
+    mes: mesCurto(c),
     "% vs A-1": months[c].vt_ano_anterior_pct,
   }));
   const sssSeries = comps.map(c => ({
-    mes: c.slice(2).replace("-", "/"),
+    mes: mesCurto(c),
     "SSS": months[c].sss_atual_pct,
   }));
   const vtHasSeries = vtSeries.filter(p => hasVal(p["% vs A-1"])).length >= 2;
@@ -845,7 +850,7 @@ export default function OnePageDashboard() {
                       <LineChart data={vtYtd} margin={{ top: 40, right: 14, left: 14, bottom: 4 }}>
                         <XAxis dataKey="cat" tick={{ fill: C.sand, fontSize: 9 }} axisLine={{ stroke: C.teal }} tickLine={false} interval={0} padding={{ left: 10, right: 10 }} />
                         <YAxis hide />
-                        <Line type="monotone" dataKey="Real" stroke={C.headerFrom} strokeWidth={2} dot={{ r: 3 }} connectNulls={false}>
+                        <Line type="monotone" dataKey="Real" stroke="#F2F7F6" strokeWidth={2.5} dot={{ r: 3, fill: "#F2F7F6" }} connectNulls={false}>
                           <LabelList dataKey="Real" content={p => <PillLabel {...p} fill={C.headerFrom} />} />
                         </Line>
                         <Line type="monotone" dataKey="Forecast" stroke="#5FC9BE" strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 3 }} connectNulls={false}>
@@ -900,7 +905,7 @@ export default function OnePageDashboard() {
                       <LineChart data={sssYtd} margin={{ top: 40, right: 14, left: 14, bottom: 4 }}>
                         <XAxis dataKey="cat" tick={{ fill: C.sand, fontSize: 9 }} axisLine={{ stroke: C.teal }} tickLine={false} interval={0} padding={{ left: 10, right: 10 }} />
                         <YAxis hide />
-                        <Line type="monotone" dataKey="Real" stroke={C.headerFrom} strokeWidth={2} dot={{ r: 3 }} connectNulls={false}>
+                        <Line type="monotone" dataKey="Real" stroke="#F2F7F6" strokeWidth={2.5} dot={{ r: 3, fill: "#F2F7F6" }} connectNulls={false}>
                           <LabelList dataKey="Real" content={p => <PillLabel {...p} fill={C.headerFrom} />} />
                         </Line>
                         <Line type="monotone" dataKey="Forecast" stroke={C.gold} strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 3 }} connectNulls={false}>
