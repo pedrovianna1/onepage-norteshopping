@@ -103,7 +103,81 @@ function parsePairs(str) {
   });
 }
 
+const MESES_ABREV = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const MESES_PT = ["JANEIRO", "FEVEREIRO", "MARÇO", "ABRIL", "MAIO", "JUNHO", "JULHO", "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO"];
+
+function linearFit(points) {
+  const n = points.length;
+  if (n === 0) return () => null;
+  if (n === 1) { const y0 = points[0].y; return () => y0; }
+  const sumX = points.reduce((a, p) => a + p.x, 0);
+  const sumY = points.reduce((a, p) => a + p.y, 0);
+  const sumXY = points.reduce((a, p) => a + p.x * p.y, 0);
+  const sumXX = points.reduce((a, p) => a + p.x * p.x, 0);
+  const denom = n * sumXX - sumX * sumX;
+  if (denom === 0) { const avg = sumY / n; return () => avg; }
+  const slope = (n * sumXY - sumX * sumY) / denom;
+  const intercept = (sumY - slope * sumX) / n;
+  return x => slope * x + intercept;
+}
+
+// Monta os 12 meses do ano da competência selecionada + colunas YTD/Forecast,
+// com "Real" vindo dos dados importados e "Forecast" projetado por regressão linear.
+function buildYtdForecast(months, selected, field) {
+  const [anoSel] = selected.split("-");
+  const pontosReais = [];
+  const porMes = {};
+  Object.keys(months).forEach(comp => {
+    const [ano, mesNum] = comp.split("-");
+    if (ano !== anoSel) return;
+    const idx = parseInt(mesNum, 10);
+    const val = months[comp][field];
+    if (hasVal(val)) {
+      pontosReais.push({ x: idx, y: val });
+      porMes[idx] = val;
+    }
+  });
+  const forecastFn = linearFit(pontosReais);
+  const linha = [];
+  for (let m = 1; m <= 12; m++) {
+    linha.push({
+      cat: MESES_ABREV[m - 1],
+      Real: porMes[m] !== undefined ? porMes[m] : null,
+      Forecast: pontosReais.length ? forecastFn(m) : null,
+    });
+  }
+  const ytd = pontosReais.length ? pontosReais.reduce((a, p) => a + p.y, 0) / pontosReais.length : null;
+  const forecastFim = pontosReais.length ? forecastFn(12) : null;
+  linha.push({ cat: "YTD", YTD: ytd });
+  linha.push({ cat: "Forecast", ForecastFinal: forecastFim });
+  return linha;
+}
+
+function PillLabel({ x, y, value, fill }) {
+  if (value === null || value === undefined || isNaN(value)) return null;
+  const text = (value > 0 ? "+" : "") + value.toFixed(1).replace(".", ",") + "%";
+  const w = 14 + text.length * 5.6;
+  return (
+    <g>
+      <rect x={x - w / 2} y={y - 22} width={w} height={16} rx={8} fill={fill} />
+      <text x={x} y={y - 10.5} textAnchor="middle" fontSize={9} fontWeight={700} fill="#fff">{text}</text>
+    </g>
+  );
+}
+
+function NiceTooltip({ active, payload, label }) {
+  if (!active || !payload || !payload.length) return null;
+  const p = payload[0];
+  if (p.value === null || p.value === undefined) return null;
+  return (
+    <div style={{
+      background: C.headerFrom, border: `1px solid ${C.teal}`, borderRadius: 8,
+      padding: "6px 10px", fontSize: 11, color: "#fff", fontWeight: 700, boxShadow: "0 4px 10px rgba(0,0,0,0.25)",
+    }}>
+      {(p.value > 0 ? "+" : "") + p.value.toFixed(1).replace(".", ",") + "%"} · {label}
+    </div>
+  );
+}
 function competenciaLabel(comp) {
   if (!comp) return { mes: "—", ano: "" };
   const [ano, mesNum] = comp.split("-");
@@ -383,7 +457,7 @@ function ContactFooter() {
         background: "linear-gradient(115deg, #0A3236 0%, #0D454A 40%, #1B7A72 100%)",
         padding: "16px 20px", display: "flex", alignItems: "center", gap: 14,
       }}>
-        <label style={{ cursor: "pointer", flexShrink: 0 }} className="no-print">
+        <label style={{ cursor: "pointer", flexShrink: 0 }}>
           <div style={{
             width: 48, height: 48, borderRadius: "50%", overflow: "hidden", background: "rgba(255,255,255,0.15)",
             display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid rgba(255,255,255,0.3)",
@@ -542,16 +616,19 @@ export default function OnePageDashboard() {
 
   const vtSeries = comps.map(c => ({
     mes: c.slice(2).replace("-", "/"),
-    "Vendas Totais": months[c].vt_atual,
+    "% vs A-1": months[c].vt_ano_anterior_pct,
   }));
   const sssSeries = comps.map(c => ({
     mes: c.slice(2).replace("-", "/"),
     "SSS": months[c].sss_atual_pct,
   }));
-  const vtHasSeries = vtSeries.filter(p => hasVal(p["Vendas Totais"])).length >= 2;
+  const vtHasSeries = vtSeries.filter(p => hasVal(p["% vs A-1"])).length >= 2;
   const sssHasSeries = sssSeries.filter(p => hasVal(p["SSS"])).length >= 2;
   const hasCpi = hasVal(d?.cpi1_pct) || hasVal(d?.cpi2_pct) || hasVal(d?.cpi3_pct);
   const hasVtDelta = hasVal(d?.vt_ano_anterior_pct) || hasVal(d?.vt_ytd_pct);
+
+  const vtYtd = selected ? buildYtdForecast(months, selected, "vt_ano_anterior_pct") : null;
+  const sssYtd = selected ? buildYtdForecast(months, selected, "sss_atual_pct") : null;
 
   const ocupData = d ? [
     { name: "ocupado", value: d.ocup_atual_pct },
@@ -559,7 +636,7 @@ export default function OnePageDashboard() {
   ] : [];
 
   return (
-    <div style={{
+    <div className="onepage-print-root" style={{
       background: C.page, minHeight: "100%", fontFamily: "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
       color: C.textDark,
     }}>
@@ -745,8 +822,8 @@ export default function OnePageDashboard() {
                 {vtHasSeries && (
                   <ResponsiveContainer width="100%" height={70}>
                     <LineChart data={vtSeries} margin={{ top: 2, right: 4, left: 4, bottom: 0 }}>
-                      <Line type="monotone" dataKey="Vendas Totais" stroke="#5FC9BE" strokeWidth={2} dot={false} />
-                      <Tooltip contentStyle={{ background: C.cardAlt, border: `1px solid ${C.teal}`, borderRadius: 8, fontSize: 11 }} formatter={v => fmtMoney(v)} />
+                      <Line type="monotone" dataKey="% vs A-1" stroke="#5FC9BE" strokeWidth={2} dot={false} />
+                      <Tooltip content={<NiceTooltip />} />
                     </LineChart>
                   </ResponsiveContainer>
                 )}
@@ -759,6 +836,29 @@ export default function OnePageDashboard() {
                   </>
                 ) : (
                   <AnnotationBox storageKey={`note:${selected}:vt-segmentos`} placeholder="Observação sobre os segmentos…" />
+                )}
+                {vtYtd && (
+                  <>
+                    <div style={{ fontSize: 9.5, letterSpacing: "0.05em", color: C.inkDim, fontWeight: 700, margin: "16px 0 20px" }}>
+                      VT — REAL x FORECAST ({competenciaLabel(selected).ano})
+                    </div>
+                    <ResponsiveContainer width="100%" height={140}>
+                      <LineChart data={vtYtd} margin={{ top: 22, right: 8, left: 4, bottom: 0 }}>
+                        <XAxis dataKey="cat" tick={{ fill: C.sand, fontSize: 9 }} axisLine={{ stroke: C.teal }} tickLine={false} interval={0} />
+                        <YAxis hide />
+                        <Line type="monotone" dataKey="Real" stroke={C.headerFrom} strokeWidth={2} dot={{ r: 3 }} connectNulls={false}>
+                          <LabelList dataKey="Real" content={p => <PillLabel {...p} fill={C.headerFrom} />} />
+                        </Line>
+                        <Line type="monotone" dataKey="Forecast" stroke="#5FC9BE" strokeWidth={1.5} strokeDasharray="4 3" dot={false} connectNulls />
+                        <Line type="monotone" dataKey="YTD" stroke="none" dot={{ r: 3, fill: C.green }}>
+                          <LabelList dataKey="YTD" content={p => <PillLabel {...p} fill={C.green} />} />
+                        </Line>
+                        <Line type="monotone" dataKey="ForecastFinal" stroke="none" dot={{ r: 3, fill: C.green }}>
+                          <LabelList dataKey="ForecastFinal" content={p => <PillLabel {...p} fill={C.green} />} />
+                        </Line>
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </>
                 )}
               </Card>
 
@@ -776,7 +876,7 @@ export default function OnePageDashboard() {
                   <ResponsiveContainer width="100%" height={70}>
                     <LineChart data={sssSeries} margin={{ top: 2, right: 4, left: 4, bottom: 0 }}>
                       <Line type="monotone" dataKey="SSS" stroke={C.gold} strokeWidth={2} dot={false} />
-                      <Tooltip contentStyle={{ background: C.cardAlt, border: `1px solid ${C.teal}`, borderRadius: 8, fontSize: 11 }} formatter={v => fmtPct(v)} />
+                      <Tooltip content={<NiceTooltip />} />
                     </LineChart>
                   </ResponsiveContainer>
                 ) : (
@@ -789,6 +889,29 @@ export default function OnePageDashboard() {
                   </div>
                 ) : (
                   <AnnotationBox storageKey={`note:${selected}:sss-movers`} placeholder="Observação sobre altas e baixas…" />
+                )}
+                {sssYtd && (
+                  <>
+                    <div style={{ fontSize: 9.5, letterSpacing: "0.05em", color: C.inkDim, fontWeight: 700, margin: "16px 0 20px" }}>
+                      SSS — REAL x FORECAST ({competenciaLabel(selected).ano})
+                    </div>
+                    <ResponsiveContainer width="100%" height={140}>
+                      <LineChart data={sssYtd} margin={{ top: 22, right: 8, left: 4, bottom: 0 }}>
+                        <XAxis dataKey="cat" tick={{ fill: C.sand, fontSize: 9 }} axisLine={{ stroke: C.teal }} tickLine={false} interval={0} />
+                        <YAxis hide />
+                        <Line type="monotone" dataKey="Real" stroke={C.headerFrom} strokeWidth={2} dot={{ r: 3 }} connectNulls={false}>
+                          <LabelList dataKey="Real" content={p => <PillLabel {...p} fill={C.headerFrom} />} />
+                        </Line>
+                        <Line type="monotone" dataKey="Forecast" stroke={C.gold} strokeWidth={1.5} strokeDasharray="4 3" dot={false} connectNulls />
+                        <Line type="monotone" dataKey="YTD" stroke="none" dot={{ r: 3, fill: C.green }}>
+                          <LabelList dataKey="YTD" content={p => <PillLabel {...p} fill={C.green} />} />
+                        </Line>
+                        <Line type="monotone" dataKey="ForecastFinal" stroke="none" dot={{ r: 3, fill: C.green }}>
+                          <LabelList dataKey="ForecastFinal" content={p => <PillLabel {...p} fill={C.green} />} />
+                        </Line>
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </>
                 )}
               </Card>
 
@@ -862,7 +985,16 @@ export default function OnePageDashboard() {
       <style>{`
         @media print {
           .no-print { display: none !important; }
-          body { background: #fff !important; }
+          html, body { background: #fff !important; margin: 0; padding: 0; }
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+            color-adjust: exact !important;
+          }
+          @page { size: A4 landscape; margin: 6mm; }
+          .onepage-print-root {
+            zoom: 0.55;
+          }
         }
       `}</style>
     </div>
