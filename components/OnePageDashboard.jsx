@@ -4,7 +4,7 @@ import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend, ComposedChart, PieChart, Pie, Cell, LabelList
 } from "recharts";
-import { Upload, Download, TrendingUp, TrendingDown, ChevronDown, ArrowUp, ArrowDown, FileDown, Save, RotateCcw, User } from "lucide-react";
+import { Upload, Download, TrendingUp, TrendingDown, ChevronDown, ArrowUp, ArrowDown, FileDown, Save, RotateCcw, User, Trash2 } from "lucide-react";
 
 // ---------- Shim: window.storage -> localStorage (fora do ambiente de artifacts) ----------
 if (typeof window !== "undefined" && !window.storage) {
@@ -139,11 +139,11 @@ function buildRealForecast(months, selected, realField, forecastField) {
   return linha;
 }
 
-function PillLabel({ x, y, value, fill, index }) {
+function PillLabel({ x, y, value, fill, index, tier = 0 }) {
   if (value === null || value === undefined || isNaN(value)) return null;
   const text = (value > 0 ? "+" : "") + value.toFixed(1).replace(".", ",") + "%";
   const w = 12 + text.length * 5.2;
-  const stagger = (index % 2 === 0) ? 22 : 34;
+  const stagger = (index % 2 === 0 ? 22 : 34) + tier * 16;
   return (
     <g>
       <rect x={x - w / 2} y={y - stagger - 14} width={w} height={14} rx={7} fill={fill} />
@@ -534,10 +534,14 @@ export default function OnePageDashboard() {
   };
 
   const downloadTemplate = () => {
-    const ws = XLSX.utils.json_to_sheet([EXAMPLE_ROW], { header: COLUMNS });
+    const existentes = Object.keys(months).sort();
+    const linhas = existentes.length > 0
+      ? existentes.map(c => ({ competencia: c, ...months[c] }))
+      : [EXAMPLE_ROW];
+    const ws = XLSX.utils.json_to_sheet(linhas, { header: COLUMNS });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "OnePage");
-    XLSX.writeFile(wb, "modelo_onepage_norteshopping.xlsx");
+    XLSX.writeFile(wb, existentes.length > 0 ? "onepage_meus_dados.xlsx" : "modelo_onepage_norteshopping.xlsx");
   };
 
   const exportBackup = async () => {
@@ -574,6 +578,22 @@ export default function OnePageDashboard() {
       await loadAll();
     } catch (e) {
       setUploadMsg("Erro ao restaurar backup: " + e.message);
+    }
+  };
+
+  const limparMeses = async () => {
+    if (!window.confirm("Isso vai apagar TODOS os meses importados (não mexe na foto nem nas observações). Quer continuar?")) return;
+    try {
+      const list = await window.storage.list("onepage:", false);
+      const keys = list?.keys || [];
+      for (const k of keys) {
+        await window.storage.delete(k, false);
+      }
+      setSelected(null);
+      setUploadMsg("Todos os meses foram apagados.");
+      await loadAll();
+    } catch (e) {
+      setUploadMsg("Erro ao limpar: " + e.message);
     }
   };
 
@@ -727,6 +747,13 @@ export default function OnePageDashboard() {
           <input type="file" accept=".json" style={{ display: "none" }}
             onChange={e => e.target.files[0] && restoreBackup(e.target.files[0])} />
         </label>
+        <button onClick={limparMeses} style={{
+          display: "flex", alignItems: "center", gap: 6, background: "#fff",
+          border: `1px solid #C9BEA5`, color: C.red, borderRadius: 8, padding: "7px 12px",
+          fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+        }}>
+          <Trash2 size={13} /> Limpar meses
+        </button>
       </div>
 
       <div style={{ padding: "20px 28px 40px" }}>
@@ -854,7 +881,7 @@ export default function OnePageDashboard() {
                           <LabelList dataKey="Real" content={p => <PillLabel {...p} fill={C.headerFrom} />} />
                         </Line>
                         <Line type="monotone" dataKey="Forecast" stroke="#5FC9BE" strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 3 }} connectNulls={false}>
-                          <LabelList dataKey="Forecast" content={p => <PillLabel {...p} fill="#2E6F63" />} />
+                          <LabelList dataKey="Forecast" content={p => <PillLabel {...p} fill="#2E6F63" tier={1} />} />
                         </Line>
                         <Line type="monotone" dataKey="YTD" stroke="none" dot={{ r: 3, fill: C.green }}>
                           <LabelList dataKey="YTD" content={p => <PillLabel {...p} fill={C.green} />} />
@@ -909,7 +936,7 @@ export default function OnePageDashboard() {
                           <LabelList dataKey="Real" content={p => <PillLabel {...p} fill={C.headerFrom} />} />
                         </Line>
                         <Line type="monotone" dataKey="Forecast" stroke={C.gold} strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 3 }} connectNulls={false}>
-                          <LabelList dataKey="Forecast" content={p => <PillLabel {...p} fill="#B07A2E" />} />
+                          <LabelList dataKey="Forecast" content={p => <PillLabel {...p} fill="#B07A2E" tier={1} />} />
                         </Line>
                         <Line type="monotone" dataKey="YTD" stroke="none" dot={{ r: 3, fill: C.green }}>
                           <LabelList dataKey="YTD" content={p => <PillLabel {...p} fill={C.green} />} />
