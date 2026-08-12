@@ -4,7 +4,7 @@ import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend, ComposedChart, PieChart, Pie, Cell, LabelList
 } from "recharts";
-import { Upload, Download, TrendingUp, TrendingDown, ChevronDown, ArrowUp, ArrowDown, FileDown, Save, RotateCcw, User, Trash2 } from "lucide-react";
+import { Upload, Download, TrendingUp, TrendingDown, ChevronDown, ArrowUp, ArrowDown, FileDown, Save, RotateCcw, User, Trash2, Camera } from "lucide-react";
 
 // ---------- Shim: window.storage -> localStorage (fora do ambiente de artifacts) ----------
 if (typeof window !== "undefined" && !window.storage) {
@@ -265,7 +265,7 @@ function KpiCard({ title, value, deltaMeta, deltaAno, isPP }) {
 }
 
 const Card = ({ children, style }) => (
-  <div style={{
+  <div className="print-card" style={{
     background: C.card, borderRadius: 14, padding: 18,
     boxShadow: "0 6px 18px rgba(13,69,74,0.16)", ...style,
   }}>
@@ -544,6 +544,26 @@ export default function OnePageDashboard() {
     XLSX.writeFile(wb, existentes.length > 0 ? "onepage_meus_dados.xlsx" : "modelo_onepage_norteshopping.xlsx");
   };
 
+  const exportarImagem = async () => {
+    try {
+      setUploadMsg("Gerando imagem…");
+      const html2canvas = (await import("html2canvas")).default;
+      const el = document.querySelector(".onepage-print-root");
+      const noPrintEls = document.querySelectorAll(".no-print");
+      noPrintEls.forEach(elx => { elx.style.display = "none"; });
+      const canvas = await html2canvas(el, { backgroundColor: "#F4EFE4", scale: 2, useCORS: true });
+      noPrintEls.forEach(elx => { elx.style.display = ""; });
+      const url = canvas.toDataURL("image/png");
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `onepage_${selected || "norteshopping"}.png`;
+      a.click();
+      setUploadMsg("Imagem gerada — já pode colar no corpo do e-mail.");
+    } catch (e) {
+      setUploadMsg("Erro ao gerar imagem: " + e.message);
+    }
+  };
+
   const exportBackup = async () => {
     try {
       const list = await window.storage.list("", false);
@@ -730,6 +750,12 @@ export default function OnePageDashboard() {
           border: "none", borderRadius: 8, padding: "7px 12px", fontSize: 12.5, fontWeight: 700, cursor: "pointer",
         }}>
           <FileDown size={13} /> Exportar PDF
+        </button>
+        <button onClick={exportarImagem} style={{
+          display: "flex", alignItems: "center", gap: 6, background: "#fff", color: C.headerFrom,
+          border: `1px solid #C9BEA5`, borderRadius: 8, padding: "7px 12px", fontSize: 12.5, fontWeight: 700, cursor: "pointer",
+        }}>
+          <Camera size={13} /> Baixar imagem (PNG)
         </button>
         <button onClick={exportBackup} style={{
           display: "flex", alignItems: "center", gap: 6, background: "#fff",
@@ -990,7 +1016,7 @@ export default function OnePageDashboard() {
                     <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
                     <XAxis dataKey="cat" tick={{ fill: C.sand, fontSize: 11 }} axisLine={{ stroke: C.teal }} tickLine={false} />
                     <YAxis yAxisId="left" tickFormatter={v => fmtCount(v)} tick={{ fill: C.sand, fontSize: 10 }} axisLine={false} tickLine={false} width={50} />
-                    <YAxis yAxisId="right" orientation="right" tickFormatter={v => "R$" + v} tick={{ fill: C.sand, fontSize: 10 }} axisLine={false} tickLine={false} width={38} />
+                    <YAxis yAxisId="right" orientation="right" tickFormatter={v => "R$" + v.toFixed(0)} tick={{ fill: C.sand, fontSize: 10 }} axisLine={false} tickLine={false} width={38} />
                     <Tooltip contentStyle={{ background: C.cardAlt, border: `1px solid ${C.teal}`, borderRadius: 8, fontSize: 12 }} />
                     <Legend wrapperStyle={{ fontSize: 11, color: C.sand }} />
                     <Bar yAxisId="left" dataKey="Fluxo Total" fill={C.teal} radius={[4, 4, 0, 0]}>
@@ -1000,7 +1026,7 @@ export default function OnePageDashboard() {
                       <LabelList dataKey="Fluxo Pagante" position="top" formatter={v => fmtCount(v)} fill={C.sand} fontSize={10} />
                     </Bar>
                     <Line yAxisId="right" type="monotone" dataKey="TM" name="TM (Ticket Médio)" stroke={C.gold} strokeWidth={2.5} dot={{ r: 4 }}>
-                      <LabelList dataKey="TM" position="top" formatter={v => "R$" + (v ?? "").toString().replace(".", ",")} fill={C.gold} fontSize={10} />
+                      <LabelList dataKey="TM" position="top" formatter={v => hasVal(v) ? "R$" + v.toFixed(2).replace(".", ",") : ""} fill={C.gold} fontSize={10} />
                     </Line>
                   </ComposedChart>
                 </ResponsiveContainer>
@@ -1026,9 +1052,12 @@ export default function OnePageDashboard() {
             print-color-adjust: exact !important;
             color-adjust: exact !important;
           }
-          @page { size: A4 portrait; margin: 5mm; }
+          @page { size: A4 landscape; margin: 6mm; }
           .onepage-print-root {
-            zoom: 0.38;
+            zoom: 0.62;
+          }
+          .print-card {
+            break-inside: avoid;
           }
         }
       `}</style>
