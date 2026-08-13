@@ -698,11 +698,7 @@ export default function OnePageDashboard() {
             </div>
             <div style={{ width: 1, height: 40, background: "rgba(255,255,255,0.25)" }} />
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, fontFamily: "Calibri, 'Segoe UI', Arial, sans-serif" }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: C.ink }}>NorteShopping</div>
-              <svg width="30" height="26" viewBox="0 0 60 52" fill="none">
-                <path d="M6 48 C6 48 17 28 23 15 C26 8.5 28 4 30 4 C32 4 34 8.5 37 15 C43 28 54 48 54 48"
-                  stroke="#6CC680" strokeWidth="4" strokeLinecap="round" fill="none" />
-              </svg>
+              <div style={{ fontSize: 24, fontWeight: 800, color: C.ink }}>NorteShopping</div>
             </div>
           </div>
         </div>
@@ -910,10 +906,10 @@ export default function OnePageDashboard() {
                           <LabelList dataKey="Forecast" content={p => <PillLabel {...p} fill="#2E6F63" tier={1} />} />
                         </Line>
                         <Line type="monotone" dataKey="YTD" stroke="none" dot={{ r: 3, fill: C.green }}>
-                          <LabelList dataKey="YTD" content={p => <PillLabel {...p} fill={C.green} />} />
+                          <LabelList dataKey="YTD" content={p => <PillLabel {...p} fill={C.green} index={0} tier={0} />} />
                         </Line>
                         <Line type="monotone" dataKey="ForecastFinal" stroke="none" dot={{ r: 3, fill: C.green }}>
-                          <LabelList dataKey="ForecastFinal" content={p => <PillLabel {...p} fill={C.green} />} />
+                          <LabelList dataKey="ForecastFinal" content={p => <PillLabel {...p} fill={C.green} index={0} tier={1} />} />
                         </Line>
                       </LineChart>
                     </ResponsiveContainer>
@@ -965,10 +961,10 @@ export default function OnePageDashboard() {
                           <LabelList dataKey="Forecast" content={p => <PillLabel {...p} fill="#B07A2E" tier={1} />} />
                         </Line>
                         <Line type="monotone" dataKey="YTD" stroke="none" dot={{ r: 3, fill: C.green }}>
-                          <LabelList dataKey="YTD" content={p => <PillLabel {...p} fill={C.green} />} />
+                          <LabelList dataKey="YTD" content={p => <PillLabel {...p} fill={C.green} index={0} tier={0} />} />
                         </Line>
                         <Line type="monotone" dataKey="ForecastFinal" stroke="none" dot={{ r: 3, fill: C.green }}>
-                          <LabelList dataKey="ForecastFinal" content={p => <PillLabel {...p} fill={C.green} />} />
+                          <LabelList dataKey="ForecastFinal" content={p => <PillLabel {...p} fill={C.green} index={0} tier={1} />} />
                         </Line>
                       </LineChart>
                     </ResponsiveContainer>
