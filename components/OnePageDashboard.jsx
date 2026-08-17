@@ -191,6 +191,19 @@ function ForecastEditor({ metricKey, ano, values, onChange }) {
   );
 }
 
+function MiniLegend({ items }) {
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 6, marginBottom: 4 }}>
+      {items.map((it, i) => (
+        <div key={i} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <span style={{ width: 8, height: 8, borderRadius: 999, background: it.color, flexShrink: 0 }} />
+          <span style={{ fontSize: 9.5, color: C.inkDim }}>{it.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function NiceTooltip({ active, payload, label }) {
   if (!active || !payload || !payload.length) return null;
   const p = payload[0];
@@ -891,12 +904,8 @@ export default function OnePageDashboard() {
                       <Line type="monotone" dataKey="Real 2026" stroke={C.gold} strokeWidth={2.5} dot={{ r: 3 }}>
                         <LabelList dataKey="Real 2026" position="top" formatter={v => fmtMoney(v)} fill={C.gold} fontSize={9} offset={12} />
                       </Line>
-                      <Line type="monotone" dataKey="Meta" stroke={C.sand} strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 2 }}>
-                        <LabelList dataKey="Meta" position="bottom" formatter={v => fmtMoney(v)} fill={C.sand} fontSize={8} offset={10} />
-                      </Line>
-                      <Line type="monotone" dataKey="Real A-1" stroke={C.green} strokeWidth={1.5} dot={{ r: 2 }}>
-                        <LabelList dataKey="Real A-1" position="bottom" formatter={v => fmtMoney(v)} fill={C.green} fontSize={8} offset={26} />
-                      </Line>
+                      <Line type="monotone" dataKey="Meta" stroke={C.sand} strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 2 }} />
+                      <Line type="monotone" dataKey="Real A-1" stroke={C.green} strokeWidth={1.5} dot={{ r: 2 }} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -911,15 +920,11 @@ export default function OnePageDashboard() {
                     <YAxis hide />
                     <Tooltip contentStyle={{ background: C.cardAlt, border: `1px solid ${C.teal}`, borderRadius: 8, fontSize: 11 }} formatter={v => fmtPct(v)} />
                     <Legend wrapperStyle={{ fontSize: 10, color: C.sand }} />
-                    <Line type="monotone" dataKey="Meta 2026" stroke={C.sand} strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 2 }}>
-                      <LabelList dataKey="Meta 2026" position="bottom" formatter={v => fmtPct(v)} fill={C.sand} fontSize={8} offset={10} />
-                    </Line>
+                    <Line type="monotone" dataKey="Meta 2026" stroke={C.sand} strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 2 }} />
                     <Line type="monotone" dataKey="Real 2026" stroke={C.gold} strokeWidth={2.5} dot={{ r: 3 }}>
                       <LabelList dataKey="Real 2026" position="top" formatter={v => fmtPct(v)} fill={C.gold} fontSize={9} offset={12} />
                     </Line>
-                    <Line type="monotone" dataKey="Real 2025" stroke={C.green} strokeWidth={1.5} dot={{ r: 2 }}>
-                      <LabelList dataKey="Real 2025" position="bottom" formatter={v => fmtPct(v)} fill={C.green} fontSize={8} offset={24} />
-                    </Line>
+                    <Line type="monotone" dataKey="Real 2025" stroke={C.green} strokeWidth={1.5} dot={{ r: 2 }} />
                   </LineChart>
                 </ResponsiveContainer>
                 <MoverList title="TOP OFENSORES (MÊS EM VALOR ABSOLUTO)" items={ofensores} color={C.red} />
@@ -960,9 +965,14 @@ export default function OnePageDashboard() {
                 )}
                 {selected && (
                   <>
-                    <div style={{ fontSize: 9.5, letterSpacing: "0.05em", color: C.inkDim, fontWeight: 700, margin: "16px 0 20px" }}>
+                    <div style={{ fontSize: 9.5, letterSpacing: "0.05em", color: C.inkDim, fontWeight: 700, margin: "16px 0 4px" }}>
                       VT — REAL x FORECAST ({competenciaLabel(selected).ano})
                     </div>
+                    <MiniLegend items={[
+                      { color: "#F2F7F6", label: "Real" },
+                      { color: "#2E6F63", label: "Forecast" },
+                      { color: C.green, label: "YTD / Forecast final" },
+                    ]} />
                     {vtYtd && (
                       <ResponsiveContainer width="100%" height={230}>
                         <LineChart data={vtYtd} margin={{ top: 56, right: 14, left: 14, bottom: 4 }}>
@@ -1019,9 +1029,14 @@ export default function OnePageDashboard() {
                 )}
                 {selected && (
                   <>
-                    <div style={{ fontSize: 9.5, letterSpacing: "0.05em", color: C.inkDim, fontWeight: 700, margin: "16px 0 20px" }}>
+                    <div style={{ fontSize: 9.5, letterSpacing: "0.05em", color: C.inkDim, fontWeight: 700, margin: "16px 0 4px" }}>
                       SSS — REAL x FORECAST ({competenciaLabel(selected).ano})
                     </div>
+                    <MiniLegend items={[
+                      { color: "#F2F7F6", label: "Real" },
+                      { color: "#B07A2E", label: "Forecast" },
+                      { color: C.green, label: "YTD / Forecast final" },
+                    ]} />
                     {sssYtd && (
                       <ResponsiveContainer width="100%" height={230}>
                         <LineChart data={sssYtd} margin={{ top: 56, right: 14, left: 14, bottom: 4 }}>
