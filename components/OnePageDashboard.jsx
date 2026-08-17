@@ -700,9 +700,11 @@ export default function OnePageDashboard() {
   }));
 
   const fluxoCombo = d ? [
-    { cat: "A-1", "Fluxo Total": d.fluxo_veiculos_ano, "Fluxo Pagante": d.fluxo_pagantes_ano, TM: d.tm_ano },
-    { cat: String(competenciaLabel(selected).ano || "Atual"), "Fluxo Total": d.fluxo_veiculos_atual, "Fluxo Pagante": d.fluxo_pagantes_atual, TM: d.tm_atual },
-    { cat: "Meta / Orç", "Fluxo Total": d.fluxo_veiculos_meta, "Fluxo Pagante": d.fluxo_pagantes_meta, TM: d.tm_meta },
+    { cat: "A-1", "Fluxo Total": d.fluxo_veiculos_ano, "Fluxo Pagante": d.fluxo_pagantes_ano, TM: d.tm_ano, pctTotal: null, pctPagante: null },
+    { cat: String(competenciaLabel(selected).ano || "Atual"), "Fluxo Total": d.fluxo_veiculos_atual, "Fluxo Pagante": d.fluxo_pagantes_atual, TM: d.tm_atual,
+      pctTotal: deltaPct(d.fluxo_veiculos_atual, d.fluxo_veiculos_ano), pctPagante: deltaPct(d.fluxo_pagantes_atual, d.fluxo_pagantes_ano) },
+    { cat: "Meta / Orç", "Fluxo Total": d.fluxo_veiculos_meta, "Fluxo Pagante": d.fluxo_pagantes_meta, TM: d.tm_meta,
+      pctTotal: deltaPct(d.fluxo_veiculos_meta, d.fluxo_veiculos_ano), pctPagante: deltaPct(d.fluxo_pagantes_meta, d.fluxo_pagantes_ano) },
   ] : [];
 
   const ofensores = d ? parsePairs(d.top_ofensores) : [];
@@ -1091,9 +1093,11 @@ export default function OnePageDashboard() {
                     <Legend wrapperStyle={{ fontSize: 11, color: C.sand }} />
                     <Bar yAxisId="left" dataKey="Fluxo Total" fill={C.teal} radius={[4, 4, 0, 0]}>
                       <LabelList dataKey="Fluxo Total" position="top" formatter={v => fmtCount(v)} fill={C.sand} fontSize={10} />
+                      <LabelList dataKey="pctTotal" position="insideTop" formatter={v => hasVal(v) ? fmtPct(v) : ""} fill="#fff" fontSize={10} fontWeight={700} offset={8} />
                     </Bar>
                     <Bar yAxisId="left" dataKey="Fluxo Pagante" fill="#5FC9BE" radius={[4, 4, 0, 0]}>
                       <LabelList dataKey="Fluxo Pagante" position="top" formatter={v => fmtCount(v)} fill={C.sand} fontSize={10} />
+                      <LabelList dataKey="pctPagante" position="insideTop" formatter={v => hasVal(v) ? fmtPct(v) : ""} fill={C.headerFrom} fontSize={10} fontWeight={700} offset={8} />
                     </Bar>
                     <Line yAxisId="right" type="monotone" dataKey="TM" name="TM (Ticket Médio)" stroke={C.gold} strokeWidth={2.5} dot={{ r: 4 }}>
                       <LabelList dataKey="TM" position="top" formatter={v => hasVal(v) ? "R$" + v.toFixed(2).replace(".", ",") : ""} fill={C.gold} fontSize={10} />
