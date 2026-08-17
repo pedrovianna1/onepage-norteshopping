@@ -106,9 +106,10 @@ function parsePairs(str) {
 const MESES_ABREV = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 const MESES_PT = ["JANEIRO", "FEVEREIRO", "MARÇO", "ABRIL", "MAIO", "JUNHO", "JULHO", "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO"];
 
-// Monta os 12 meses do ano da competência selecionada + colunas YTD/Forecast,
-// usando os valores "Real" e "Forecast" digitados manualmente em cada mês (sem projeção automática).
-function buildRealForecast(months, selected, realField, forecastField) {
+// Monta os 12 meses do ano da competência selecionada + colunas YTD/Forecast.
+// "Real" vem sempre da planilha. "Forecast" usa o valor digitado manualmente na tela
+// (overrides) quando existir; senão cai para o que veio da planilha (forecastField).
+function buildRealForecast(months, selected, realField, forecastField, overrides) {
   const [anoSel] = selected.split("-");
   const porMes = {};
   Object.keys(months).forEach(comp => {
@@ -122,7 +123,8 @@ function buildRealForecast(months, selected, realField, forecastField) {
   for (let m = 1; m <= 12; m++) {
     const row = porMes[m] || {};
     const real = row[realField];
-    const forecast = row[forecastField];
+    const overrideVal = overrides ? overrides[m] : undefined;
+    const forecast = hasVal(overrideVal) ? overrideVal : row[forecastField];
     if (hasVal(real)) reais.push(real);
     if (hasVal(forecast)) forecasts.push(forecast);
     linha.push({
@@ -143,12 +145,49 @@ function PillLabel({ x, y, value, fill, index, tier = 0 }) {
   if (value === null || value === undefined || isNaN(value)) return null;
   const text = (value > 0 ? "+" : "") + value.toFixed(1).replace(".", ",") + "%";
   const w = 12 + text.length * 5.2;
-  const stagger = (index % 2 === 0 ? 22 : 34) + tier * 16;
+  const stagger = [16, 30, 44][index % 3] + tier * 18;
   return (
     <g>
-      <rect x={x - w / 2} y={y - stagger - 14} width={w} height={14} rx={7} fill={fill} />
-      <text x={x} y={y - stagger - 4} textAnchor="middle" fontSize={8.5} fontWeight={700} fill="#fff">{text}</text>
+      <rect x={x - w / 2} y={y - stagger - 13} width={w} height={13} rx={6.5} fill={fill} />
+      <text x={x} y={y - stagger - 3.5} textAnchor="middle" fontSize={8} fontWeight={700} fill="#fff">{text}</text>
     </g>
+  );
+}
+
+// Editor inline de Forecast: 12 caixinhas (Jan-Dez) pra digitar o % previsto
+// sem precisar reabrir a planilha. Fica salvo por ano/mês/métrica.
+function ForecastEditor({ metricKey, ano, values, onChange }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="no-print" style={{ marginTop: 6 }}>
+      <button onClick={() => setOpen(o => !o)} style={{
+        background: "none", border: "none", color: C.inkDim, fontSize: 10.5, textDecoration: "underline",
+        cursor: "pointer", padding: 0,
+      }}>
+        {open ? "fechar edição do forecast" : "+ editar forecast por mês"}
+      </button>
+      {open && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 6, marginTop: 8 }}>
+          {MESES_ABREV.map((nome, i) => {
+            const m = i + 1;
+            return (
+              <label key={m} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                <span style={{ fontSize: 8.5, color: C.inkDim }}>{nome}</span>
+                <input
+                  type="number" step="0.1" placeholder="—"
+                  value={hasVal(values[m]) ? values[m] : ""}
+                  onChange={e => onChange(m, e.target.value === "" ? null : Number(e.target.value))}
+                  style={{
+                    width: "100%", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.18)",
+                    borderRadius: 6, padding: "4px 5px", fontSize: 10.5, color: C.ink, boxSizing: "border-box",
+                  }}
+                />
+              </label>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -477,6 +516,31 @@ export default function OnePageDashboard() {
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(true);
   const [uploadMsg, setUploadMsg] = useState("");
+  const [vtForecastOv, setVtForecastOv] = useState({}); // { "2026": { 1: 5.7, ... } }
+  const [sssForecastOv, setSssForecastOv] = useState({});
+
+  const loadForecastOverrides = useCallback(async (ano) => {
+    if (!ano) return;
+    for (const [metric, setter] of [["vt", setVtForecastOv], ["sss", setSssForecastOv]]) {
+      try {
+        const r = await window.storage.get(`forecast_ov_${metric}_${ano}`, false);
+        setter(prev => ({ ...prev, [ano]: r?.value ? JSON.parse(r.value) : {} }));
+      } catch (e) {
+        setter(prev => ({ ...prev, [ano]: {} }));
+      }
+    }
+  }, []);
+
+  const salvarForecastOv = async (metric, ano, mes, valor) => {
+    const setter = metric === "vt" ? setVtForecastOv : setSssForecastOv;
+    setter(prev => {
+      const atualAno = { ...(prev[ano] || {}) };
+      if (valor === null) delete atualAno[mes]; else atualAno[mes] = valor;
+      const novo = { ...prev, [ano]: atualAno };
+      window.storage.set(`forecast_ov_${metric}_${ano}`, JSON.stringify(atualAno), false).catch(() => {});
+      return novo;
+    });
+  };
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -503,6 +567,7 @@ export default function OnePageDashboard() {
   }, []);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+  useEffect(() => { if (selected) loadForecastOverrides(selected.split("-")[0]); }, [selected, loadForecastOverrides]);
 
   const handleFile = async (file) => {
     setUploadMsg("Lendo planilha…");
@@ -659,8 +724,9 @@ export default function OnePageDashboard() {
   const hasCpi = hasVal(d?.cpi1_pct) || hasVal(d?.cpi2_pct) || hasVal(d?.cpi3_pct);
   const hasVtDelta = hasVal(d?.vt_ano_anterior_pct) || hasVal(d?.vt_ytd_pct);
 
-  const vtYtd = selected ? buildRealForecast(months, selected, "vt_ano_anterior_pct", "vt_forecast_pct") : null;
-  const sssYtd = selected ? buildRealForecast(months, selected, "sss_atual_pct", "sss_forecast_pct") : null;
+  const anoSelecionado = selected ? selected.split("-")[0] : null;
+  const vtYtd = selected ? buildRealForecast(months, selected, "vt_ano_anterior_pct", "vt_forecast_pct", vtForecastOv[anoSelecionado]) : null;
+  const sssYtd = selected ? buildRealForecast(months, selected, "sss_atual_pct", "sss_forecast_pct", sssForecastOv[anoSelecionado]) : null;
 
   const ocupData = d ? [
     { name: "ocupado", value: d.ocup_atual_pct },
@@ -814,9 +880,9 @@ export default function OnePageDashboard() {
                     <ReceitaLine title="Receita de Mídia" atual={d.midia_atual} meta={d.midia_meta} ano={d.midia_ano} />
                   </div>
                   <ResponsiveContainer width="100%" height={280}>
-                    <LineChart data={noiSeries} margin={{ top: 24, right: 8, left: 0, bottom: 4 }}>
+                    <LineChart data={noiSeries} margin={{ top: 24, right: 20, left: 20, bottom: 4 }}>
                       <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
-                      <XAxis dataKey="mes" tick={{ fill: C.sand, fontSize: 10 }} axisLine={{ stroke: C.teal }} tickLine={false} />
+                      <XAxis dataKey="mes" tick={{ fill: C.sand, fontSize: 10 }} axisLine={{ stroke: C.teal }} tickLine={false} padding={{ left: 16, right: 16 }} />
                       <YAxis hide />
                       <Tooltip contentStyle={{ background: C.cardAlt, border: `1px solid ${C.teal}`, borderRadius: 8, fontSize: 11 }} formatter={v => fmtMoney(v)} />
                       <Legend wrapperStyle={{ fontSize: 10, color: C.sand }} />
@@ -837,9 +903,9 @@ export default function OnePageDashboard() {
               <Card>
                 <CardTitle badge="INAD">Inadimplência AMM + COND</CardTitle>
                 <ResponsiveContainer width="100%" height={220}>
-                  <LineChart data={inadSeries} margin={{ top: 24, right: 4, left: 4, bottom: 4 }}>
+                  <LineChart data={inadSeries} margin={{ top: 24, right: 20, left: 20, bottom: 4 }}>
                     <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
-                    <XAxis dataKey="mes" tick={{ fill: C.sand, fontSize: 10 }} axisLine={{ stroke: C.teal }} tickLine={false} />
+                    <XAxis dataKey="mes" tick={{ fill: C.sand, fontSize: 10 }} axisLine={{ stroke: C.teal }} tickLine={false} padding={{ left: 16, right: 16 }} />
                     <YAxis hide />
                     <Tooltip contentStyle={{ background: C.cardAlt, border: `1px solid ${C.teal}`, borderRadius: 8, fontSize: 11 }} formatter={v => fmtPct(v)} />
                     <Legend wrapperStyle={{ fontSize: 10, color: C.sand }} />
@@ -890,29 +956,33 @@ export default function OnePageDashboard() {
                 ) : (
                   <AnnotationBox storageKey={`note:${selected}:vt-segmentos`} placeholder="Observação sobre os segmentos…" />
                 )}
-                {vtYtd && (
+                {selected && (
                   <>
                     <div style={{ fontSize: 9.5, letterSpacing: "0.05em", color: C.inkDim, fontWeight: 700, margin: "16px 0 20px" }}>
                       VT — REAL x FORECAST ({competenciaLabel(selected).ano})
                     </div>
-                    <ResponsiveContainer width="100%" height={190}>
-                      <LineChart data={vtYtd} margin={{ top: 40, right: 14, left: 14, bottom: 4 }}>
-                        <XAxis dataKey="cat" tick={{ fill: C.sand, fontSize: 9 }} axisLine={{ stroke: C.teal }} tickLine={false} interval={0} padding={{ left: 10, right: 10 }} />
-                        <YAxis hide />
-                        <Line type="monotone" dataKey="Real" stroke="#F2F7F6" strokeWidth={2.5} dot={{ r: 3, fill: "#F2F7F6" }} connectNulls={false}>
-                          <LabelList dataKey="Real" content={p => <PillLabel {...p} fill={C.headerFrom} />} />
-                        </Line>
-                        <Line type="monotone" dataKey="Forecast" stroke="#5FC9BE" strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 3 }} connectNulls={false}>
-                          <LabelList dataKey="Forecast" content={p => <PillLabel {...p} fill="#2E6F63" tier={1} />} />
-                        </Line>
-                        <Line type="monotone" dataKey="YTD" stroke="none" dot={{ r: 3, fill: C.green }}>
-                          <LabelList dataKey="YTD" content={p => <PillLabel {...p} fill={C.green} index={0} tier={0} />} />
-                        </Line>
-                        <Line type="monotone" dataKey="ForecastFinal" stroke="none" dot={{ r: 3, fill: C.green }}>
-                          <LabelList dataKey="ForecastFinal" content={p => <PillLabel {...p} fill={C.green} index={0} tier={1} />} />
-                        </Line>
-                      </LineChart>
-                    </ResponsiveContainer>
+                    {vtYtd && (
+                      <ResponsiveContainer width="100%" height={230}>
+                        <LineChart data={vtYtd} margin={{ top: 56, right: 14, left: 14, bottom: 4 }}>
+                          <XAxis dataKey="cat" tick={{ fill: C.sand, fontSize: 9 }} axisLine={{ stroke: C.teal }} tickLine={false} interval={0} padding={{ left: 10, right: 10 }} />
+                          <YAxis hide />
+                          <Line type="monotone" dataKey="Real" stroke="#F2F7F6" strokeWidth={2.5} dot={{ r: 3, fill: "#F2F7F6" }} connectNulls={false}>
+                            <LabelList dataKey="Real" content={p => <PillLabel {...p} fill={C.headerFrom} />} />
+                          </Line>
+                          <Line type="monotone" dataKey="Forecast" stroke="#5FC9BE" strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 3 }} connectNulls={false}>
+                            <LabelList dataKey="Forecast" content={p => <PillLabel {...p} fill="#2E6F63" tier={1} />} />
+                          </Line>
+                          <Line type="monotone" dataKey="YTD" stroke="none" dot={{ r: 3, fill: C.green }}>
+                            <LabelList dataKey="YTD" content={p => <PillLabel {...p} fill={C.green} index={0} tier={0} />} />
+                          </Line>
+                          <Line type="monotone" dataKey="ForecastFinal" stroke="none" dot={{ r: 3, fill: C.green }}>
+                            <LabelList dataKey="ForecastFinal" content={p => <PillLabel {...p} fill={C.green} index={0} tier={1} />} />
+                          </Line>
+                        </LineChart>
+                      </ResponsiveContainer>
+                    )}
+                    <ForecastEditor metricKey="vt" ano={anoSelecionado} values={vtForecastOv[anoSelecionado] || {}}
+                      onChange={(mes, val) => salvarForecastOv("vt", anoSelecionado, mes, val)} />
                   </>
                 )}
               </Card>
@@ -945,29 +1015,33 @@ export default function OnePageDashboard() {
                 ) : (
                   <AnnotationBox storageKey={`note:${selected}:sss-movers`} placeholder="Observação sobre altas e baixas…" />
                 )}
-                {sssYtd && (
+                {selected && (
                   <>
                     <div style={{ fontSize: 9.5, letterSpacing: "0.05em", color: C.inkDim, fontWeight: 700, margin: "16px 0 20px" }}>
                       SSS — REAL x FORECAST ({competenciaLabel(selected).ano})
                     </div>
-                    <ResponsiveContainer width="100%" height={190}>
-                      <LineChart data={sssYtd} margin={{ top: 40, right: 14, left: 14, bottom: 4 }}>
-                        <XAxis dataKey="cat" tick={{ fill: C.sand, fontSize: 9 }} axisLine={{ stroke: C.teal }} tickLine={false} interval={0} padding={{ left: 10, right: 10 }} />
-                        <YAxis hide />
-                        <Line type="monotone" dataKey="Real" stroke="#F2F7F6" strokeWidth={2.5} dot={{ r: 3, fill: "#F2F7F6" }} connectNulls={false}>
-                          <LabelList dataKey="Real" content={p => <PillLabel {...p} fill={C.headerFrom} />} />
-                        </Line>
-                        <Line type="monotone" dataKey="Forecast" stroke={C.gold} strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 3 }} connectNulls={false}>
-                          <LabelList dataKey="Forecast" content={p => <PillLabel {...p} fill="#B07A2E" tier={1} />} />
-                        </Line>
-                        <Line type="monotone" dataKey="YTD" stroke="none" dot={{ r: 3, fill: C.green }}>
-                          <LabelList dataKey="YTD" content={p => <PillLabel {...p} fill={C.green} index={0} tier={0} />} />
-                        </Line>
-                        <Line type="monotone" dataKey="ForecastFinal" stroke="none" dot={{ r: 3, fill: C.green }}>
-                          <LabelList dataKey="ForecastFinal" content={p => <PillLabel {...p} fill={C.green} index={0} tier={1} />} />
-                        </Line>
-                      </LineChart>
-                    </ResponsiveContainer>
+                    {sssYtd && (
+                      <ResponsiveContainer width="100%" height={230}>
+                        <LineChart data={sssYtd} margin={{ top: 56, right: 14, left: 14, bottom: 4 }}>
+                          <XAxis dataKey="cat" tick={{ fill: C.sand, fontSize: 9 }} axisLine={{ stroke: C.teal }} tickLine={false} interval={0} padding={{ left: 10, right: 10 }} />
+                          <YAxis hide />
+                          <Line type="monotone" dataKey="Real" stroke="#F2F7F6" strokeWidth={2.5} dot={{ r: 3, fill: "#F2F7F6" }} connectNulls={false}>
+                            <LabelList dataKey="Real" content={p => <PillLabel {...p} fill={C.headerFrom} />} />
+                          </Line>
+                          <Line type="monotone" dataKey="Forecast" stroke={C.gold} strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 3 }} connectNulls={false}>
+                            <LabelList dataKey="Forecast" content={p => <PillLabel {...p} fill="#B07A2E" tier={1} />} />
+                          </Line>
+                          <Line type="monotone" dataKey="YTD" stroke="none" dot={{ r: 3, fill: C.green }}>
+                            <LabelList dataKey="YTD" content={p => <PillLabel {...p} fill={C.green} index={0} tier={0} />} />
+                          </Line>
+                          <Line type="monotone" dataKey="ForecastFinal" stroke="none" dot={{ r: 3, fill: C.green }}>
+                            <LabelList dataKey="ForecastFinal" content={p => <PillLabel {...p} fill={C.green} index={0} tier={1} />} />
+                          </Line>
+                        </LineChart>
+                      </ResponsiveContainer>
+                    )}
+                    <ForecastEditor metricKey="sss" ano={anoSelecionado} values={sssForecastOv[anoSelecionado] || {}}
+                      onChange={(mes, val) => salvarForecastOv("sss", anoSelecionado, mes, val)} />
                   </>
                 )}
               </Card>
