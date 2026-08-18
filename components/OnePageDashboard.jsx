@@ -53,8 +53,8 @@ const C = {
 const COLUMNS = [
   "competencia",
   "noi_atual", "noi_meta", "noi_ano_anterior",
-  "sss_atual_pct", "sss_meta_pct", "sss_ano_pct", "sss_forecast_pct", "sss_ytd_pct", "cpi1_pct", "cpi2_pct", "cpi3_pct",
-  "vt_atual", "vt_ano_anterior_pct", "vt_ytd_pct", "vt_forecast_pct",
+  "sss_atual_pct", "sss_meta_pct", "sss_ano_pct", "sss_forecast_pct", "sss_ytd_pct", "sss_vendas_atual", "sss_vendas_a1", "cpi1_pct", "cpi2_pct", "cpi3_pct",
+  "vt_atual", "vt_ano_anterior_pct", "vt_ytd_pct", "vt_forecast_pct", "vt_a1_valor",
   "inad_atual_pct", "inad_meta_pct", "inad_ano_pct",
   "ocup_atual_pct", "ocup_meta_pct", "ocup_ano_pct",
   "aluguel_min_atual", "aluguel_min_meta", "aluguel_min_ano",
@@ -74,8 +74,8 @@ const COLUMNS = [
 const EXAMPLE_ROW = {
   competencia: "2026-06",
   noi_atual: 13600000, noi_meta: 13260000, noi_ano_anterior: 13300000,
-  sss_atual_pct: 1.6, sss_meta_pct: 1.3, sss_ano_pct: -0.6, sss_forecast_pct: 1.8, sss_ytd_pct: 1.9, cpi1_pct: 1.9, cpi2_pct: 4.7, cpi3_pct: -4.9,
-  vt_atual: 125700000, vt_ano_anterior_pct: 5.7, vt_ytd_pct: 6.2, vt_forecast_pct: 6.0,
+  sss_atual_pct: 1.6, sss_meta_pct: 1.3, sss_ano_pct: -0.6, sss_forecast_pct: 1.8, sss_ytd_pct: 1.9, sss_vendas_atual: 121204422, sss_vendas_a1: 119345847, cpi1_pct: 1.9, cpi2_pct: 4.7, cpi3_pct: -4.9,
+  vt_atual: 125700000, vt_ano_anterior_pct: 5.7, vt_ytd_pct: 6.2, vt_forecast_pct: 6.0, vt_a1_valor: 118920000,
   inad_atual_pct: -1.8, inad_meta_pct: -2.1, inad_ano_pct: -7.4,
   ocup_atual_pct: 98.1, ocup_meta_pct: 96.1, ocup_ano_pct: 91.2,
   aluguel_min_atual: 8700000, aluguel_min_meta: 9666000, aluguel_min_ano: 8878000,
@@ -109,7 +109,9 @@ const MESES_PT = ["JANEIRO", "FEVEREIRO", "MARÇO", "ABRIL", "MAIO", "JUNHO", "J
 // Monta os 12 meses do ano da competência selecionada + colunas YTD/Forecast.
 // "Real" vem sempre da planilha. "Forecast" usa o valor digitado manualmente na tela
 // (overrides) quando existir; senão cai para o que veio da planilha (forecastField).
-function buildRealForecast(months, selected, realField, forecastField, overrides, manualYtd) {
+function buildRealForecast(months, selected, cfg) {
+  // cfg = { pctField, atualField, a1Field, forecastPctOverrides, forecastA1Overrides, manualYtd }
+  const { pctField, atualField, a1Field, forecastPctOverrides, forecastA1Overrides, manualYtd } = cfg;
   const [anoSel] = selected.split("-");
   const porMes = {};
   Object.keys(months).forEach(comp => {
@@ -117,35 +119,66 @@ function buildRealForecast(months, selected, realField, forecastField, overrides
     if (ano !== anoSel) return;
     porMes[parseInt(mesNum, 10)] = months[comp];
   });
-  const reaisPorMes = {};
-  const forecastsPorMes = {};
+
+  const reaisPctPorMes = {}; // % de cada mês realizado, só pra desenhar a linha "Real"
+  const forecastLinhaPorMes = {}; // % de cada mês futuro, só pra desenhar a linha "Forecast"
   let ultimoMesReal = null;
+
+  let somaAtualRealizado = 0, somaA1Realizado = 0, temRealizado = false;
+  let somaAtualTotal = 0, somaA1Total = 0, temTotal = false;
+
   for (let m = 1; m <= 12; m++) {
     const row = porMes[m] || {};
-    const real = row[realField];
-    const overrideVal = overrides ? overrides[m] : undefined;
-    const forecast = hasVal(real) ? null : (hasVal(overrideVal) ? overrideVal : row[forecastField]);
-    if (hasVal(real)) { reaisPorMes[m] = real; ultimoMesReal = m; }
-    if (hasVal(forecast)) forecastsPorMes[m] = forecast;
+    const realPct = row[pctField];
+    const realAtual = row[atualField];
+    const a1Explicito = row[a1Field];
+    // Se não veio o valor absoluto de A-1 explícito, tenta derivar do par (atual, % vs A-1) já existente.
+    const a1Derivado = (hasVal(realAtual) && hasVal(realPct)) ? realAtual / (1 + realPct / 100) : null;
+    const a1Realizado = hasVal(a1Explicito) ? a1Explicito : a1Derivado;
+
+    if (hasVal(realPct)) { reaisPctPorMes[m] = realPct; ultimoMesReal = m; }
+
+    if (hasVal(realAtual) && hasVal(a1Realizado)) {
+      somaAtualRealizado += realAtual; somaA1Realizado += a1Realizado; temRealizado = true;
+      somaAtualTotal += realAtual; somaA1Total += a1Realizado; temTotal = true;
+    } else {
+      // Mês futuro: usa o % e o valor A-1 digitados no editor de forecast
+      const fPct = forecastPctOverrides ? forecastPctOverrides[m] : undefined;
+      const fA1 = forecastA1Overrides ? forecastA1Overrides[m] : undefined;
+      if (hasVal(fPct)) forecastLinhaPorMes[m] = fPct;
+      if (hasVal(fPct) && hasVal(fA1)) {
+        const fAtual = fA1 * (1 + fPct / 100);
+        somaAtualTotal += fAtual; somaA1Total += fA1; temTotal = true;
+      }
+    }
   }
-  // Ponte: repete o último valor Real como início do Forecast, pra linha pontilhada
-  // encostar visualmente onde a linha cheia termina (sem criar um segmento solto).
-  if (ultimoMesReal !== null && Object.keys(forecastsPorMes).some(m => parseInt(m, 10) > ultimoMesReal)) {
-    forecastsPorMes[ultimoMesReal] = reaisPorMes[ultimoMesReal];
+
+  // Ponte visual: repete o último % Real como ponto inicial do Forecast, só pra a linha
+  // pontilhada encostar onde a linha cheia termina (não entra em nenhuma soma).
+  const temForecastFuturo = Object.keys(forecastLinhaPorMes).some(m => parseInt(m, 10) > (ultimoMesReal || 0));
+  if (ultimoMesReal !== null && temForecastFuturo) {
+    forecastLinhaPorMes[ultimoMesReal] = reaisPctPorMes[ultimoMesReal];
   }
+
   const linha = [];
   for (let m = 1; m <= 12; m++) {
     linha.push({
       cat: MESES_ABREV[m - 1],
-      Real: hasVal(reaisPorMes[m]) ? reaisPorMes[m] : null,
-      Forecast: hasVal(forecastsPorMes[m]) ? forecastsPorMes[m] : null,
+      Real: hasVal(reaisPctPorMes[m]) ? reaisPctPorMes[m] : null,
+      Forecast: hasVal(forecastLinhaPorMes[m]) ? forecastLinhaPorMes[m] : null,
     });
   }
-  const reais = Object.values(reaisPorMes);
-  const forecasts = Object.values(forecastsPorMes);
-  if (!reais.length && !forecasts.length && !hasVal(manualYtd)) return null;
-  const ytd = hasVal(manualYtd) ? manualYtd : (reais.length ? reais.reduce((a, b) => a + b, 0) / reais.length : null);
-  const forecastFinal = forecasts.length ? forecasts.reduce((a, b) => a + b, 0) / forecasts.length : null;
+
+  if (!temRealizado && !temTotal && !hasVal(manualYtd)) return null;
+
+  // YTD = soma dos meses realizados (2026) ÷ soma dos meses realizados (A-1) - 1.
+  // Só cai pro valor digitado manualmente se não der pra calcular por soma.
+  const ytd = (temRealizado && somaA1Realizado !== 0)
+    ? (somaAtualRealizado / somaA1Realizado - 1) * 100
+    : (hasVal(manualYtd) ? manualYtd : null);
+  // Forecast final = soma do ano inteiro (realizado + projetado) ÷ soma do ano inteiro A-1 - 1.
+  const forecastFinal = (temTotal && somaA1Total !== 0) ? (somaAtualTotal / somaA1Total - 1) * 100 : null;
+
   linha.push({ cat: "YTD", YTD: ytd });
   linha.push({ cat: "Forecast", ForecastFinal: forecastFinal });
   return { rows: linha, bridgeIndex: ultimoMesReal !== null ? ultimoMesReal - 1 : -1 };
@@ -166,7 +199,7 @@ function PillLabel({ x, y, value, fill, index, tier = 0 }) {
 
 // Editor inline de Forecast: 12 caixinhas (Jan-Dez) pra digitar o % previsto
 // sem precisar reabrir a planilha. Fica salvo por ano/mês/métrica.
-function ForecastEditor({ metricKey, ano, values, onChange }) {
+function ForecastEditor({ ano, pctValues, a1Values, onChangePct, onChangeA1 }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="no-print" style={{ marginTop: 6 }}>
@@ -177,24 +210,38 @@ function ForecastEditor({ metricKey, ano, values, onChange }) {
         {open ? "fechar edição do forecast" : "+ editar forecast por mês"}
       </button>
       {open && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 6, marginTop: 8 }}>
-          {MESES_ABREV.map((nome, i) => {
-            const m = i + 1;
-            return (
-              <label key={m} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-                <span style={{ fontSize: 8.5, color: C.inkDim }}>{nome}</span>
-                <input
-                  type="number" step="0.1" placeholder="—"
-                  value={hasVal(values[m]) ? values[m] : ""}
-                  onChange={e => onChange(m, e.target.value === "" ? null : Number(e.target.value))}
-                  style={{
-                    width: "100%", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.18)",
-                    borderRadius: 6, padding: "4px 5px", fontSize: 10.5, color: C.ink, boxSizing: "border-box",
-                  }}
-                />
-              </label>
-            );
-          })}
+        <div style={{ marginTop: 8 }}>
+          <div style={{ fontSize: 9, color: C.inkDim, marginBottom: 6 }}>
+            "% Forecast" = variação prevista vs A-1. "Valor A-1" = venda real de 2025 daquele mês (precisa dos dois pra entrar na conta do Forecast final).
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 6 }}>
+            {MESES_ABREV.map((nome, i) => {
+              const m = i + 1;
+              return (
+                <div key={m} style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  <span style={{ fontSize: 8.5, color: C.inkDim }}>{nome}</span>
+                  <input
+                    type="number" step="0.1" placeholder="% forecast"
+                    value={hasVal(pctValues[m]) ? pctValues[m] : ""}
+                    onChange={e => onChangePct(m, e.target.value === "" ? null : Number(e.target.value))}
+                    style={{
+                      width: "100%", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.18)",
+                      borderRadius: 6, padding: "4px 5px", fontSize: 10, color: C.ink, boxSizing: "border-box",
+                    }}
+                  />
+                  <input
+                    type="number" step="1" placeholder="valor A-1"
+                    value={hasVal(a1Values[m]) ? a1Values[m] : ""}
+                    onChange={e => onChangeA1(m, e.target.value === "" ? null : Number(e.target.value))}
+                    style={{
+                      width: "100%", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)",
+                      borderRadius: 6, padding: "4px 5px", fontSize: 9.5, color: C.inkDim, boxSizing: "border-box",
+                    }}
+                  />
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
@@ -539,14 +586,19 @@ export default function OnePageDashboard() {
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(true);
   const [uploadMsg, setUploadMsg] = useState("");
-  const [vtForecastOv, setVtForecastOv] = useState({}); // { "2026": { 1: 5.7, ... } }
+  const [vtForecastOv, setVtForecastOv] = useState({}); // { "2026": { 1: 5.7, ... } } (% forecast)
   const [sssForecastOv, setSssForecastOv] = useState({});
+  const [vtForecastA1Ov, setVtForecastA1Ov] = useState({}); // { "2026": { 1: 118920000, ... } } (valor A-1)
+  const [sssForecastA1Ov, setSssForecastA1Ov] = useState({});
 
   const loadForecastOverrides = useCallback(async (ano) => {
     if (!ano) return;
-    for (const [metric, setter] of [["vt", setVtForecastOv], ["sss", setSssForecastOv]]) {
+    for (const [key, setter] of [
+      ["forecast_ov_vt", setVtForecastOv], ["forecast_ov_sss", setSssForecastOv],
+      ["forecast_a1_vt", setVtForecastA1Ov], ["forecast_a1_sss", setSssForecastA1Ov],
+    ]) {
       try {
-        const r = await window.storage.get(`forecast_ov_${metric}_${ano}`, false);
+        const r = await window.storage.get(`${key}_${ano}`, false);
         setter(prev => ({ ...prev, [ano]: r?.value ? JSON.parse(r.value) : {} }));
       } catch (e) {
         setter(prev => ({ ...prev, [ano]: {} }));
@@ -561,6 +613,17 @@ export default function OnePageDashboard() {
       if (valor === null) delete atualAno[mes]; else atualAno[mes] = valor;
       const novo = { ...prev, [ano]: atualAno };
       window.storage.set(`forecast_ov_${metric}_${ano}`, JSON.stringify(atualAno), false).catch(() => {});
+      return novo;
+    });
+  };
+
+  const salvarForecastA1 = async (metric, ano, mes, valor) => {
+    const setter = metric === "vt" ? setVtForecastA1Ov : setSssForecastA1Ov;
+    setter(prev => {
+      const atualAno = { ...(prev[ano] || {}) };
+      if (valor === null) delete atualAno[mes]; else atualAno[mes] = valor;
+      const novo = { ...prev, [ano]: atualAno };
+      window.storage.set(`forecast_a1_${metric}_${ano}`, JSON.stringify(atualAno), false).catch(() => {});
       return novo;
     });
   };
@@ -750,8 +813,16 @@ export default function OnePageDashboard() {
   const hasVtDelta = hasVal(d?.vt_ano_anterior_pct) || hasVal(d?.vt_ytd_pct);
 
   const anoSelecionado = selected ? selected.split("-")[0] : null;
-  const vtYtd = selected ? buildRealForecast(months, selected, "vt_ano_anterior_pct", "vt_forecast_pct", vtForecastOv[anoSelecionado], d?.vt_ytd_pct) : null;
-  const sssYtd = selected ? buildRealForecast(months, selected, "sss_atual_pct", "sss_forecast_pct", sssForecastOv[anoSelecionado], d?.sss_ytd_pct) : null;
+  const vtYtd = selected ? buildRealForecast(months, selected, {
+    pctField: "vt_ano_anterior_pct", atualField: "vt_atual", a1Field: "vt_a1_valor",
+    forecastPctOverrides: vtForecastOv[anoSelecionado], forecastA1Overrides: vtForecastA1Ov[anoSelecionado],
+    manualYtd: d?.vt_ytd_pct, // usado só se não der pra calcular por soma (sem vt_atual/A-1 suficiente)
+  }) : null;
+  const sssYtd = selected ? buildRealForecast(months, selected, {
+    pctField: "sss_atual_pct", atualField: "sss_vendas_atual", a1Field: "sss_vendas_a1",
+    forecastPctOverrides: sssForecastOv[anoSelecionado], forecastA1Overrides: sssForecastA1Ov[anoSelecionado],
+    manualYtd: d?.sss_ytd_pct,
+  }) : null;
 
   const ocupData = d ? [
     { name: "ocupado", value: d.ocup_atual_pct },
@@ -1003,8 +1074,10 @@ export default function OnePageDashboard() {
                         </LineChart>
                       </ResponsiveContainer>
                     )}
-                    <ForecastEditor metricKey="vt" ano={anoSelecionado} values={vtForecastOv[anoSelecionado] || {}}
-                      onChange={(mes, val) => salvarForecastOv("vt", anoSelecionado, mes, val)} />
+                    <ForecastEditor ano={anoSelecionado}
+                      pctValues={vtForecastOv[anoSelecionado] || {}} a1Values={vtForecastA1Ov[anoSelecionado] || {}}
+                      onChangePct={(mes, val) => salvarForecastOv("vt", anoSelecionado, mes, val)}
+                      onChangeA1={(mes, val) => salvarForecastA1("vt", anoSelecionado, mes, val)} />
                   </>
                 )}
               </Card>
@@ -1067,8 +1140,10 @@ export default function OnePageDashboard() {
                         </LineChart>
                       </ResponsiveContainer>
                     )}
-                    <ForecastEditor metricKey="sss" ano={anoSelecionado} values={sssForecastOv[anoSelecionado] || {}}
-                      onChange={(mes, val) => salvarForecastOv("sss", anoSelecionado, mes, val)} />
+                    <ForecastEditor ano={anoSelecionado}
+                      pctValues={sssForecastOv[anoSelecionado] || {}} a1Values={sssForecastA1Ov[anoSelecionado] || {}}
+                      onChangePct={(mes, val) => salvarForecastOv("sss", anoSelecionado, mes, val)}
+                      onChangeA1={(mes, val) => salvarForecastA1("sss", anoSelecionado, mes, val)} />
                   </>
                 )}
               </Card>
