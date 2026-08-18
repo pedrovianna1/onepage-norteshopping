@@ -181,7 +181,23 @@ function buildRealForecast(months, selected, cfg) {
 
   linha.push({ cat: "YTD", YTD: ytd });
   linha.push({ cat: "Forecast", ForecastFinal: forecastFinal });
-  return { rows: linha, bridgeIndex: ultimoMesReal !== null ? ultimoMesReal - 1 : -1 };
+  return {
+    rows: linha, bridgeIndex: ultimoMesReal !== null ? ultimoMesReal - 1 : -1,
+    debug: {
+      somaAtualRealizado, somaA1Realizado, mesesRealizados: temRealizado ? Object.keys(reaisPctPorMes).length : 0,
+      somaAtualTotal, somaA1Total, mesesTotal: Object.keys(reaisPctPorMes).length + Object.keys(forecastLinhaPorMes).filter(m => hasVal(forecastA1Overrides?.[m])).length,
+    },
+  };
+}
+
+function LineLabel({ x, y, value, fill, formatter, dir = 1, base = 10, index }) {
+  if (!hasVal(value)) return null;
+  const stagger = base + (index % 2) * 10;
+  return (
+    <text x={x} y={y - dir * stagger} textAnchor="middle" fontSize={8} fontWeight={700} fill={fill}>
+      {formatter(value)}
+    </text>
+  );
 }
 
 function PillLabel({ x, y, value, fill, index, tier = 0 }) {
@@ -242,6 +258,28 @@ function ForecastEditor({ ano, pctValues, a1Values, onChangePct, onChangeA1 }) {
               );
             })}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DebugCalc({ debug }) {
+  const [open, setOpen] = useState(false);
+  if (!debug) return null;
+  const fmt = v => hasVal(v) ? v.toLocaleString("pt-BR", { maximumFractionDigits: 0 }) : "—";
+  return (
+    <div className="no-print" style={{ marginTop: 4 }}>
+      <button onClick={() => setOpen(o => !o)} style={{
+        background: "none", border: "none", color: C.inkDim, fontSize: 9.5, textDecoration: "underline",
+        cursor: "pointer", padding: 0,
+      }}>
+        {open ? "ocultar cálculo" : "ver números usados na conta"}
+      </button>
+      {open && (
+        <div style={{ fontSize: 9.5, color: C.inkDim, marginTop: 4, lineHeight: 1.6 }}>
+          <div>YTD ({debug.mesesRealizados} mês/meses realizados): soma 2026 = {fmt(debug.somaAtualRealizado)} · soma A-1 = {fmt(debug.somaA1Realizado)}</div>
+          <div>Forecast final ({debug.mesesTotal} mês/meses no total): soma 2026 = {fmt(debug.somaAtualTotal)} · soma A-1 = {fmt(debug.somaA1Total)}</div>
         </div>
       )}
     </div>
@@ -771,12 +809,15 @@ export default function OnePageDashboard() {
   const comps = Object.keys(months).sort();
   const d = selected ? months[selected] : null;
 
-  const noiSeries = comps.map(c => ({
-    mes: mesCurto(c),
-    "Real 2026": months[c].noi_atual,
-    "Meta": months[c].noi_meta,
-    "Real A-1": months[c].noi_ano_anterior,
-  }));
+  const noiComboSeries = comps.map(c => {
+    const row = months[c];
+    return {
+      mes: mesCurto(c),
+      NOI: row.noi_atual,
+      "NOI vs Ano-1": deltaPct(row.noi_atual, row.noi_ano_anterior),
+      "NOI/Venda": (hasVal(row.noi_atual) && hasVal(row.vt_atual) && row.vt_atual !== 0) ? (row.noi_atual / row.vt_atual) * 100 : null,
+    };
+  });
 
   const inadSeries = comps.map(c => ({
     mes: mesCurto(c),
@@ -976,18 +1017,23 @@ export default function OnePageDashboard() {
                     <ReceitaLine title="Receita de Mídia" atual={d.midia_atual} meta={d.midia_meta} ano={d.midia_ano} />
                   </div>
                   <ResponsiveContainer width="100%" height={280}>
-                    <LineChart data={noiSeries} margin={{ top: 24, right: 20, left: 20, bottom: 4 }}>
+                    <ComposedChart data={noiComboSeries} margin={{ top: 24, right: 20, left: 8, bottom: 4 }}>
                       <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
                       <XAxis dataKey="mes" tick={{ fill: C.sand, fontSize: 10 }} axisLine={{ stroke: C.teal }} tickLine={false} padding={{ left: 16, right: 16 }} />
-                      <YAxis hide />
-                      <Tooltip contentStyle={{ background: C.cardAlt, border: `1px solid ${C.teal}`, borderRadius: 8, fontSize: 11 }} formatter={v => fmtMoney(v)} />
+                      <YAxis yAxisId="left" hide />
+                      <YAxis yAxisId="right" orientation="right" hide />
+                      <Tooltip contentStyle={{ background: C.cardAlt, border: `1px solid ${C.teal}`, borderRadius: 8, fontSize: 11 }} />
                       <Legend wrapperStyle={{ fontSize: 10, color: C.sand }} />
-                      <Line type="monotone" dataKey="Real 2026" stroke={C.gold} strokeWidth={2.5} dot={{ r: 3 }}>
-                        <LabelList dataKey="Real 2026" position="top" formatter={v => fmtMoney(v)} fill={C.gold} fontSize={9} offset={12} />
+                      <Bar yAxisId="left" dataKey="NOI" fill={C.teal} radius={[4, 4, 0, 0]}>
+                        <LabelList dataKey="NOI" position="top" formatter={v => fmtMoney(v)} fill={C.sand} fontSize={9} />
+                      </Bar>
+                      <Line yAxisId="right" type="monotone" dataKey="NOI vs Ano-1" stroke={C.gold} strokeWidth={2.5} dot={{ r: 3 }}>
+                        <LabelList dataKey="NOI vs Ano-1" content={p => <LineLabel {...p} fill={C.gold} formatter={fmtPct} dir={1} base={10} />} />
                       </Line>
-                      <Line type="monotone" dataKey="Meta" stroke={C.sand} strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 2 }} />
-                      <Line type="monotone" dataKey="Real A-1" stroke={C.green} strokeWidth={1.5} dot={{ r: 2 }} />
-                    </LineChart>
+                      <Line yAxisId="right" type="monotone" dataKey="NOI/Venda" stroke={C.green} strokeWidth={1.5} dot={{ r: 2 }}>
+                        <LabelList dataKey="NOI/Venda" content={p => <LineLabel {...p} fill={C.green} formatter={fmtPct} dir={-1} base={10} />} />
+                      </Line>
+                    </ComposedChart>
                   </ResponsiveContainer>
                 </div>
               </Card>
@@ -1001,11 +1047,15 @@ export default function OnePageDashboard() {
                     <YAxis hide />
                     <Tooltip contentStyle={{ background: C.cardAlt, border: `1px solid ${C.teal}`, borderRadius: 8, fontSize: 11 }} formatter={v => fmtPct(v)} />
                     <Legend wrapperStyle={{ fontSize: 10, color: C.sand }} />
-                    <Line type="monotone" dataKey="Meta 2026" stroke={C.sand} strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 2 }} />
+                    <Line type="monotone" dataKey="Meta 2026" stroke={C.sand} strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 2 }}>
+                      <LabelList dataKey="Meta 2026" content={p => <LineLabel {...p} fill={C.sand} formatter={fmtPct} dir={-1} base={10} />} />
+                    </Line>
                     <Line type="monotone" dataKey="Real 2026" stroke={C.gold} strokeWidth={2.5} dot={{ r: 3 }}>
                       <LabelList dataKey="Real 2026" position="top" formatter={v => fmtPct(v)} fill={C.gold} fontSize={9} offset={12} />
                     </Line>
-                    <Line type="monotone" dataKey="Real 2025" stroke={C.green} strokeWidth={1.5} dot={{ r: 2 }} />
+                    <Line type="monotone" dataKey="Real 2025" stroke={C.green} strokeWidth={1.5} dot={{ r: 2 }}>
+                      <LabelList dataKey="Real 2025" content={p => <LineLabel {...p} fill={C.green} formatter={fmtPct} dir={-1} base={22} />} />
+                    </Line>
                   </LineChart>
                 </ResponsiveContainer>
                 <MoverList title="TOP OFENSORES (MÊS EM VALOR ABSOLUTO)" items={ofensores} color={C.red} />
@@ -1078,6 +1128,7 @@ export default function OnePageDashboard() {
                       pctValues={vtForecastOv[anoSelecionado] || {}} a1Values={vtForecastA1Ov[anoSelecionado] || {}}
                       onChangePct={(mes, val) => salvarForecastOv("vt", anoSelecionado, mes, val)}
                       onChangeA1={(mes, val) => salvarForecastA1("vt", anoSelecionado, mes, val)} />
+                    <DebugCalc debug={vtYtd?.debug} />
                   </>
                 )}
               </Card>
@@ -1144,6 +1195,7 @@ export default function OnePageDashboard() {
                       pctValues={sssForecastOv[anoSelecionado] || {}} a1Values={sssForecastA1Ov[anoSelecionado] || {}}
                       onChangePct={(mes, val) => salvarForecastOv("sss", anoSelecionado, mes, val)}
                       onChangeA1={(mes, val) => salvarForecastA1("sss", anoSelecionado, mes, val)} />
+                    <DebugCalc debug={sssYtd?.debug} />
                   </>
                 )}
               </Card>
