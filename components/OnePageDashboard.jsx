@@ -53,7 +53,7 @@ const C = {
 const COLUMNS = [
   "competencia",
   "noi_atual", "noi_meta", "noi_ano_anterior",
-  "sss_atual_pct", "sss_meta_pct", "sss_ano_pct", "sss_forecast_pct", "cpi1_pct", "cpi2_pct", "cpi3_pct",
+  "sss_atual_pct", "sss_meta_pct", "sss_ano_pct", "sss_forecast_pct", "sss_ytd_pct", "cpi1_pct", "cpi2_pct", "cpi3_pct",
   "vt_atual", "vt_ano_anterior_pct", "vt_ytd_pct", "vt_forecast_pct",
   "inad_atual_pct", "inad_meta_pct", "inad_ano_pct",
   "ocup_atual_pct", "ocup_meta_pct", "ocup_ano_pct",
@@ -74,7 +74,7 @@ const COLUMNS = [
 const EXAMPLE_ROW = {
   competencia: "2026-06",
   noi_atual: 13600000, noi_meta: 13260000, noi_ano_anterior: 13300000,
-  sss_atual_pct: 1.6, sss_meta_pct: 1.3, sss_ano_pct: -0.6, sss_forecast_pct: 1.8, cpi1_pct: 1.9, cpi2_pct: 4.7, cpi3_pct: -4.9,
+  sss_atual_pct: 1.6, sss_meta_pct: 1.3, sss_ano_pct: -0.6, sss_forecast_pct: 1.8, sss_ytd_pct: 1.9, cpi1_pct: 1.9, cpi2_pct: 4.7, cpi3_pct: -4.9,
   vt_atual: 125700000, vt_ano_anterior_pct: 5.7, vt_ytd_pct: 6.2, vt_forecast_pct: 6.0,
   inad_atual_pct: -1.8, inad_meta_pct: -2.1, inad_ano_pct: -7.4,
   ocup_atual_pct: 98.1, ocup_meta_pct: 96.1, ocup_ano_pct: 91.2,
@@ -109,7 +109,7 @@ const MESES_PT = ["JANEIRO", "FEVEREIRO", "MARÇO", "ABRIL", "MAIO", "JUNHO", "J
 // Monta os 12 meses do ano da competência selecionada + colunas YTD/Forecast.
 // "Real" vem sempre da planilha. "Forecast" usa o valor digitado manualmente na tela
 // (overrides) quando existir; senão cai para o que veio da planilha (forecastField).
-function buildRealForecast(months, selected, realField, forecastField, overrides) {
+function buildRealForecast(months, selected, realField, forecastField, overrides, manualYtd) {
   const [anoSel] = selected.split("-");
   const porMes = {};
   Object.keys(months).forEach(comp => {
@@ -117,28 +117,38 @@ function buildRealForecast(months, selected, realField, forecastField, overrides
     if (ano !== anoSel) return;
     porMes[parseInt(mesNum, 10)] = months[comp];
   });
-  const linha = [];
-  const reais = [];
-  const forecasts = [];
+  const reaisPorMes = {};
+  const forecastsPorMes = {};
+  let ultimoMesReal = null;
   for (let m = 1; m <= 12; m++) {
     const row = porMes[m] || {};
     const real = row[realField];
     const overrideVal = overrides ? overrides[m] : undefined;
-    const forecast = hasVal(overrideVal) ? overrideVal : row[forecastField];
-    if (hasVal(real)) reais.push(real);
-    if (hasVal(forecast)) forecasts.push(forecast);
+    const forecast = hasVal(real) ? null : (hasVal(overrideVal) ? overrideVal : row[forecastField]);
+    if (hasVal(real)) { reaisPorMes[m] = real; ultimoMesReal = m; }
+    if (hasVal(forecast)) forecastsPorMes[m] = forecast;
+  }
+  // Ponte: repete o último valor Real como início do Forecast, pra linha pontilhada
+  // encostar visualmente onde a linha cheia termina (sem criar um segmento solto).
+  if (ultimoMesReal !== null && Object.keys(forecastsPorMes).some(m => parseInt(m, 10) > ultimoMesReal)) {
+    forecastsPorMes[ultimoMesReal] = reaisPorMes[ultimoMesReal];
+  }
+  const linha = [];
+  for (let m = 1; m <= 12; m++) {
     linha.push({
       cat: MESES_ABREV[m - 1],
-      Real: hasVal(real) ? real : null,
-      Forecast: hasVal(forecast) ? forecast : null,
+      Real: hasVal(reaisPorMes[m]) ? reaisPorMes[m] : null,
+      Forecast: hasVal(forecastsPorMes[m]) ? forecastsPorMes[m] : null,
     });
   }
-  if (!reais.length && !forecasts.length) return null;
-  const ytd = reais.length ? reais.reduce((a, b) => a + b, 0) / reais.length : null;
+  const reais = Object.values(reaisPorMes);
+  const forecasts = Object.values(forecastsPorMes);
+  if (!reais.length && !forecasts.length && !hasVal(manualYtd)) return null;
+  const ytd = hasVal(manualYtd) ? manualYtd : (reais.length ? reais.reduce((a, b) => a + b, 0) / reais.length : null);
   const forecastFinal = forecasts.length ? forecasts.reduce((a, b) => a + b, 0) / forecasts.length : null;
   linha.push({ cat: "YTD", YTD: ytd });
   linha.push({ cat: "Forecast", ForecastFinal: forecastFinal });
-  return linha;
+  return { rows: linha, bridgeIndex: ultimoMesReal !== null ? ultimoMesReal - 1 : -1 };
 }
 
 function PillLabel({ x, y, value, fill, index, tier = 0 }) {
@@ -740,8 +750,8 @@ export default function OnePageDashboard() {
   const hasVtDelta = hasVal(d?.vt_ano_anterior_pct) || hasVal(d?.vt_ytd_pct);
 
   const anoSelecionado = selected ? selected.split("-")[0] : null;
-  const vtYtd = selected ? buildRealForecast(months, selected, "vt_ano_anterior_pct", "vt_forecast_pct", vtForecastOv[anoSelecionado]) : null;
-  const sssYtd = selected ? buildRealForecast(months, selected, "sss_atual_pct", "sss_forecast_pct", sssForecastOv[anoSelecionado]) : null;
+  const vtYtd = selected ? buildRealForecast(months, selected, "vt_ano_anterior_pct", "vt_forecast_pct", vtForecastOv[anoSelecionado], d?.vt_ytd_pct) : null;
+  const sssYtd = selected ? buildRealForecast(months, selected, "sss_atual_pct", "sss_forecast_pct", sssForecastOv[anoSelecionado], d?.sss_ytd_pct) : null;
 
   const ocupData = d ? [
     { name: "ocupado", value: d.ocup_atual_pct },
@@ -975,14 +985,14 @@ export default function OnePageDashboard() {
                     ]} />
                     {vtYtd && (
                       <ResponsiveContainer width="100%" height={230}>
-                        <LineChart data={vtYtd} margin={{ top: 56, right: 14, left: 14, bottom: 4 }}>
+                        <LineChart data={vtYtd.rows} margin={{ top: 56, right: 14, left: 14, bottom: 4 }}>
                           <XAxis dataKey="cat" tick={{ fill: C.sand, fontSize: 9 }} axisLine={{ stroke: C.teal }} tickLine={false} interval={0} padding={{ left: 10, right: 10 }} />
                           <YAxis hide />
                           <Line type="monotone" dataKey="Real" stroke="#F2F7F6" strokeWidth={2.5} dot={{ r: 3, fill: "#F2F7F6" }} connectNulls={false}>
                             <LabelList dataKey="Real" content={p => <PillLabel {...p} fill={C.headerFrom} />} />
                           </Line>
                           <Line type="monotone" dataKey="Forecast" stroke="#5FC9BE" strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 3 }} connectNulls={false}>
-                            <LabelList dataKey="Forecast" content={p => <PillLabel {...p} fill="#2E6F63" tier={1} />} />
+                            <LabelList dataKey="Forecast" content={p => p.index === vtYtd.bridgeIndex ? null : <PillLabel {...p} fill="#2E6F63" tier={1} />} />
                           </Line>
                           <Line type="monotone" dataKey="YTD" stroke="none" dot={{ r: 3, fill: C.green }}>
                             <LabelList dataKey="YTD" content={p => <PillLabel {...p} fill={C.green} index={0} tier={0} />} />
@@ -1039,14 +1049,14 @@ export default function OnePageDashboard() {
                     ]} />
                     {sssYtd && (
                       <ResponsiveContainer width="100%" height={230}>
-                        <LineChart data={sssYtd} margin={{ top: 56, right: 14, left: 14, bottom: 4 }}>
+                        <LineChart data={sssYtd.rows} margin={{ top: 56, right: 14, left: 14, bottom: 4 }}>
                           <XAxis dataKey="cat" tick={{ fill: C.sand, fontSize: 9 }} axisLine={{ stroke: C.teal }} tickLine={false} interval={0} padding={{ left: 10, right: 10 }} />
                           <YAxis hide />
                           <Line type="monotone" dataKey="Real" stroke="#F2F7F6" strokeWidth={2.5} dot={{ r: 3, fill: "#F2F7F6" }} connectNulls={false}>
                             <LabelList dataKey="Real" content={p => <PillLabel {...p} fill={C.headerFrom} />} />
                           </Line>
                           <Line type="monotone" dataKey="Forecast" stroke={C.gold} strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 3 }} connectNulls={false}>
-                            <LabelList dataKey="Forecast" content={p => <PillLabel {...p} fill="#B07A2E" tier={1} />} />
+                            <LabelList dataKey="Forecast" content={p => p.index === sssYtd.bridgeIndex ? null : <PillLabel {...p} fill="#B07A2E" tier={1} />} />
                           </Line>
                           <Line type="monotone" dataKey="YTD" stroke="none" dot={{ r: 3, fill: C.green }}>
                             <LabelList dataKey="YTD" content={p => <PillLabel {...p} fill={C.green} index={0} tier={0} />} />
