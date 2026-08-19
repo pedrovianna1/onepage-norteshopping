@@ -598,10 +598,14 @@ function ContactFooter() {
       }}>
         <label style={{ cursor: "pointer", flexShrink: 0 }}>
           <div style={{
-            width: 48, height: 48, borderRadius: "50%", overflow: "hidden", background: "rgba(255,255,255,0.15)",
+            width: 52, height: 52, borderRadius: "50%", overflow: "hidden", background: "rgba(255,255,255,0.15)",
             display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid rgba(255,255,255,0.3)",
+            flexShrink: 0, aspectRatio: "1 / 1",
           }}>
-            {photo ? <img src={photo} alt="Foto" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <User size={22} color="#fff" />}
+            {photo ? (
+              <img src={photo} alt="Foto" width={52} height={52}
+                style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center", display: "block" }} />
+            ) : <User size={22} color="#fff" />}
           </div>
           <input type="file" accept="image/*" style={{ display: "none" }}
             onChange={e => e.target.files[0] && onUpload(e.target.files[0])} />
@@ -982,7 +986,7 @@ export default function OnePageDashboard() {
       </div>
 
       <div style={{ padding: "20px 28px 40px" }}>
-        {uploadMsg && <div style={{ fontSize: 12, color: C.headerFrom, fontWeight: 700, marginBottom: 12 }}>{uploadMsg}</div>}
+        {uploadMsg && <div className="no-print" style={{ fontSize: 12, color: C.headerFrom, fontWeight: 700, marginBottom: 12 }}>{uploadMsg}</div>}
         {loading && <div style={{ color: C.textDark, fontSize: 13 }}>Carregando…</div>}
 
         {!loading && comps.length === 0 && (
@@ -999,7 +1003,7 @@ export default function OnePageDashboard() {
               <KpiCard title="NOI Total" value={fmtMoney(d.noi_atual)}
                 deltaMeta={deltaPct(d.noi_atual, d.noi_meta)} deltaAno={deltaPct(d.noi_atual, d.noi_ano_anterior)} />
               <KpiCard title="Vendas (SSS)" value={fmtPct(d.sss_atual_pct)}
-                isPP deltaMeta={deltaPP(d.sss_atual_pct, d.sss_meta_pct)} deltaAno={deltaPP(d.sss_atual_pct, d.sss_ano_pct)} />
+                isPP deltaAno={deltaPP(d.sss_atual_pct, d.sss_ano_pct)} />
               <KpiCard title="Inadimplência" value={fmtPct(d.inad_atual_pct)}
                 isPP deltaMeta={deltaPP(d.inad_atual_pct, d.inad_meta_pct)} deltaAno={deltaPP(d.inad_atual_pct, d.inad_ano_pct)} />
               <KpiCard title="Taxa de Ocupação" value={fmtPct(d.ocup_atual_pct)}
